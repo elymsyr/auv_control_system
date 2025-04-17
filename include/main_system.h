@@ -9,7 +9,7 @@
 
 class MainSystem {
 private:
-    std::vector<Subsystem*> subsystems;
+    std::vector<std::unique_ptr<Subsystem>> subsystems;
     EnvironmentState& envState;
     SharedGroundCommand& groundCommand;
     std::atomic<bool> live{false};
@@ -24,7 +24,12 @@ public:
     void resume(int order);
     void restart(int order);
     void shutdown(int order);
-    void makeSystem(std::vector<Subsystem*> newSubsystems) { subsystems = std::move(newSubsystems); }
+    void makeSystem(std::vector<Subsystem*> newSubsystems) {
+        subsystems.clear();
+        for (auto* subsystem : newSubsystems) {
+            subsystems.emplace_back(subsystem);
+        }
+    }
     void test();
     SystemData& system;
 

@@ -3,7 +3,7 @@
 ## Core Architecture
 - [x] Implement RAII wrappers for all critical resources (OpenSSL contexts, socket handles, thread lifetimes)
    - Example: Wrap `EVP_CIPHER_CTX` initialization and cleanup in a `CipherContext` class so that destruction always frees resources.
-- [ ] Replace raw pointers in subsystem containers with `std::unique_ptr` for automatic cleanup
+- [x] Replace raw pointers in subsystem containers with `std::unique_ptr` for automatic cleanup
    - Example: Store subsystems in `std::vector<std::unique_ptr<Subsystem>>` instead of raw pointers.
 - [ ] Design and integrate a lightweight dependency injection framework
    - Example: Define factory functions to instantiate subsystems with explicit dependencies injected.

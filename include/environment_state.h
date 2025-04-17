@@ -10,20 +10,13 @@
 
 class EnvironmentState {
 public:
-
-    struct Mission {
-        int mission = 0;
-        int state = 0;
-        bool active = false;
-    };
-
     #pragma pack(push, 1)
     struct VehicleState {
-        double eta[6] = {0, 0, 0, 0, 0, 0};
-        double nu[6] = {0, 0, 0, 0, 0, 0};
-        double nu_dot[6] = {0, 0, 0, 0, 0, 0};
-        double temperature = 0;
-        double pressure = 0;
+        std::array<double, 6> eta;
+        std::array<double, 6> nu;
+        std::array<double, 6> nu_dot;
+        double temperature;
+        double pressure;
     };
     struct VehicleStateDes {
         double eta[6] = {10, 10, 10, 0, 0, -1.1};
@@ -36,7 +29,7 @@ public:
         int centerX, centerY; // Track grid center offsets
         const int width, height, depth;
     
-        Mapped(int w = 40, int h = 40, int d = 2) 
+        Mapped(int w = 40, int h = 40, int d = 2)
             : width(w), height(h), depth(d),
               grid(d, std::vector<std::vector<int>>(h, std::vector<int>(w, 0))),
               centerX(w/2), centerY(h/2) {}
@@ -45,18 +38,16 @@ public:
         int updateCell(int x, int y, int z, int value);
     };
 
-    void updateState(const SensorData& data);
-    VehicleState getCurrentState() const;
-    VehicleStateDes getDesiredState() const;
+    void updateState(const SensorData& data, int interval);
+    VehicleState getCurrentState();
+    VehicleStateDes getDesiredState();
     std::vector<uint8_t> serialize();
     void setDesiredState(const VehicleStateDes& state);
 
 private:
-    mutable std::mutex mtx;
-    VehicleState currentState;
-    VehicleStateDes desiredState;
-    Mission mission;
-    Mapped mapped;
+    boost::lockfree::spsc_queue<VehicleState> currentState{10};
+    boost::lockfree::spsc_queue<VehicleStateDes> desiredState{10};
+    boost::lockfree::spsc_queue<Mapped> mapped{10};
 };
 
 #endif // ENVIRONMENT_STATE_H

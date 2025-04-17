@@ -29,8 +29,6 @@ public:
 #include "sensor_data.h"
 #include "signal_data.h"
 
-// Simple type aliases suffice if no extra logic needed
-using SharedSensorData = SharedQueue<SensorData, 128>;
 using SharedSignalData = SharedQueue<SignalData, 128>;
 
 #endif // SHARED_DATA_H

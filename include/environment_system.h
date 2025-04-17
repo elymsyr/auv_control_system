@@ -4,10 +4,11 @@
 #include "subsystem.h"
 #include "shared_data.h"
 #include "environment_state.h"
+#include "sensor_system.h"
 
 class EnvironmentSystem : public Subsystem {
 public:
-    EnvironmentSystem(std::string name, int runtime, SystemData& system, int order, SharedSensorData& sensorData, EnvironmentState& envState);
+    EnvironmentSystem(std::string name, int runtime, SystemData& system, int order, EnvironmentState& envState);
     bool midInit() override;
     // void midSuspend() override;
     // void midHalt() override;
@@ -15,7 +16,7 @@ public:
     void liveLoop() override;
     
 private:
-    SharedSensorData& sharedSensorData;
+    SensorSystem sensorSystem;
     EnvironmentState& envState;
     std::atomic<bool> processing{false};
     

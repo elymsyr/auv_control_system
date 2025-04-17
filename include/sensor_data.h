@@ -8,8 +8,11 @@
 struct SensorData : public BaseData {
     double depth;
     double temperature;
+    double pressure;
+    std::array<double, 6> nu;
+    std::array<double, 6> nu_dot;
 
-    SensorData(int id = 0) : BaseData(id), depth(0.0), temperature(0.0) {}
+    SensorData() : depth(0.0), temperature(0.0) {}
 };
 
 #endif // SENSOR_DATA_H

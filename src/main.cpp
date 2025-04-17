@@ -12,7 +12,6 @@
 
 int main() {
     SystemData systemData;
-    SharedSensorData sharedSensorData;
     SharedGroundCommand sharedGroundCommand;
     SharedSignalData sharedSignalData;
     EnvironmentState environmentData;
@@ -20,12 +19,11 @@ int main() {
     MainSystem mainSystem(systemData, environmentData, sharedGroundCommand);
     
     CommunicationSystem commSystem("CommunicationSystem", 500, systemData, 1, environmentData, sharedGroundCommand);
-    SensorSystem sensorSystem("SensorSystem", 90, systemData, 2, sharedSensorData);
-    EnvironmentSystem envSystem("EnvironmentSystem", 100, systemData, 3, sharedSensorData, environmentData);
+    EnvironmentSystem envSystem("EnvironmentSystem", 200, systemData, 3, environmentData);
     MotionSystem motionSystem("MotionSystem", 200, systemData, 4, environmentData, sharedSignalData);
     ControlSystem controlSystem("ControlSystem", 200, systemData, 5, sharedSignalData);
 
-    mainSystem.makeSystem({&commSystem, &sensorSystem, &envSystem, &motionSystem, &controlSystem});
+    mainSystem.makeSystem({&commSystem, &envSystem, &motionSystem, &controlSystem});
     mainSystem.init(1);
 
     return 0;

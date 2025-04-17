@@ -7,10 +7,8 @@
 class BaseData {
 protected:
     double timing;
-    int idx;
-
 public:
-    BaseData(int id = 0) : idx(id) {
+    BaseData() {
         timing = std::chrono::duration<double>(
             std::chrono::steady_clock::now().time_since_epoch())
             .count();
@@ -21,10 +19,6 @@ public:
 
     double getTiming() const {
         return timing;
-    }
-
-    int getIdx() const {
-        return idx;
     }
 };
 

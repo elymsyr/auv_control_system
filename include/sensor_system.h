@@ -5,21 +5,15 @@
 #include "shared_data.h"
 #include <boost/lockfree/spsc_queue.hpp>
 
-class SensorSystem : public Subsystem {
+class SensorSystem {
 private:
-    SharedSensorData& sharedData;
-    boost::lockfree::spsc_queue<SensorData> queue{100};
+    boost::lockfree::spsc_queue<SensorData> queue{10};
 
 public:
-    explicit SensorSystem(std::string name, int runtime, SystemData& system, int order, SharedSensorData& sd);
-    bool midInit() override;
-    // void midSuspend() override;
-    // void midHalt() override;
-    // void midResume() override;
-    void liveLoop() override;
+    explicit SensorSystem();
 
 private:
-    SensorData readHardwareSensors();
+    SensorData readEnvironmentSensors();
 };
 
 #endif // SENSOR_SYSTEM_H

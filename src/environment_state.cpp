@@ -1,35 +1,48 @@
 #include "environment_state.h"
 #include "sensor_system.h"
-
-void EnvironmentState::updateState(const SensorData& data) {
-    std::lock_guard<std::mutex> lock(mtx);
-    // Update current state from sensor data
-    // Example:
-    currentState.temperature = data.temperature;
-}
-
-EnvironmentState::VehicleState EnvironmentState::getCurrentState() const {
-    std::lock_guard<std::mutex> lock(mtx);
-    return currentState;
-}
-
-EnvironmentState::VehicleStateDes EnvironmentState::getDesiredState() const {
-    std::lock_guard<std::mutex> lock(mtx);
-    return desiredState;
-}
-
-void EnvironmentState::setDesiredState(const VehicleStateDes& state) {
-    std::lock_guard<std::mutex> lock(mtx);
-    desiredState = state;
-}
-
 #include <sstream>
 #include <iomanip>
 #include <cstring>
 #include <zlib.h>
 
+void EnvironmentState::updateState(const SensorData& data, int interval) {
+    VehicleState state;
+    // Convert SensorData to VehicleState (example conversion logic)
+    // Calculate new eta based on some logic (example: integrate nu over time)
+    for (size_t i = 0; i < state.eta.size(); ++i) {
+        state.eta[i] += data.nu[i] * interval; // Example integration
+    }
+
+    state.nu = data.nu;
+    state.nu_dot = data.nu_dot;
+    state.temperature = data.temperature;
+    state.pressure = data.pressure;
+
+    currentState.push(state);
+}
+
+EnvironmentState::VehicleState EnvironmentState::getCurrentState() {
+    EnvironmentState::VehicleState state;
+    if (!currentState.empty()) {
+        const auto front = currentState.front(); // Retrieve the front element
+        state = front; // Copy the value directly
+    }
+    return state;
+}
+
+EnvironmentState::VehicleStateDes EnvironmentState::getDesiredState() {
+    VehicleStateDes state;
+    if (!desiredState.empty()) {
+        desiredState.pop(state); // Retrieve and remove the front element
+    }
+    return state;
+}
+
+void EnvironmentState::setDesiredState(const VehicleStateDes& state) {
+    desiredState.push(state);
+}
+
 std::vector<uint8_t> EnvironmentState::serialize() {
-    std::lock_guard<std::mutex> lock(mtx);
     std::vector<uint8_t> buffer;
     
     // Header byte

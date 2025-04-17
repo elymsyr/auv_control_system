@@ -9,7 +9,7 @@ MainSystem::MainSystem(SystemData& system, EnvironmentState& envState, SharedGro
 {}
 
 void MainSystem::addSubsystem(Subsystem* subsystem) {
-    subsystems.push_back(subsystem);
+    subsystems.push_back(std::unique_ptr<Subsystem>(subsystem));
 }
 
 void MainSystem::test() {
@@ -19,7 +19,7 @@ void MainSystem::test() {
 void MainSystem::init(int order) {
     initialized.store(true);
     if (order == 0) {
-        for(auto* subsystem : subsystems) {
+        for(auto& subsystem : subsystems) {
             subsystem->init();
         }
     } else {
@@ -160,7 +160,7 @@ void MainSystem::suspend(int order) {
 
 void MainSystem::resume(int order) {
     if (order == 0) {
-        for(auto* subsystem : subsystems) {
+        for(const auto& subsystem : subsystems) {
             subsystem->resume();
         }
     } else {
@@ -199,11 +199,11 @@ void MainSystem::shutdown(int order) {
 void MainSystem::checkSubsystemHealth() {
     time_t now = time(nullptr);
     int order = 1;
-    for(auto* subsystem : subsystems) {
+    for(auto& subsystem : subsystems) {
         system.addPacket(2, 0, subsystem->isInitialized() ? 1 : 0, subsystem->isLive() ? 1 : 0, order);
         if(subsystem->isRunning() && now - subsystem->getLastHeartbeat() > 2) {
             system.addPacket(1, 9, 0, 0, order);
-            handleSubsystemFailure(subsystem);
+            handleSubsystemFailure(subsystem.get());
         }
         order += 1;
     }

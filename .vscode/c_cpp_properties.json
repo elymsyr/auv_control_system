@@ -8,7 +8,8 @@
                 "/home/eren/GitHub/ControlSystem/include",
                 "/usr/include",
                 "/usr/local/include",
-                "${CONDA_PREFIX}/include"
+                "${CONDA_PREFIX}/include",
+                "/home/eren/miniconda3/envs/mppi/include"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang-18",
