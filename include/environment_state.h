@@ -41,6 +41,7 @@ public:
     void updateState(const SensorData& data, int interval);
     VehicleState getCurrentState();
     VehicleStateDes getDesiredState();
+    void pack_state(const auto& s, std::vector<uint8_t>& buf);
     std::vector<uint8_t> serialize();
     void setDesiredState(const VehicleStateDes& state);
 

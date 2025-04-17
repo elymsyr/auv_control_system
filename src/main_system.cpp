@@ -210,9 +210,9 @@ void MainSystem::checkSubsystemHealth() {
 }
 
 void MainSystem::handleSubsystemFailure(Subsystem* subsystem) {
-    if(subsystem->restarting.load()) {
-        std::cout << "Subsystem is already restarting." << std::endl;
-        return;
-    }
+    // if(subsystem->restarting.load()) {
+    //     std::cout << "Subsystem is already restarting." << std::endl;
+    //     return;
+    // }
     subsystem->restart();
 }

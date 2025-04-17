@@ -9,7 +9,7 @@ struct SignalData : public BaseData {
     double lighting;
     double system;
 
-    SignalData(int id = 0) : BaseData(id), lighting(0.0), system(0.0) {
+    SignalData() : lighting(0.0), system(0.0) {
         for (double &p : propeller) {
             p = 0.0;
         }

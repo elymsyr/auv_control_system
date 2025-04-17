@@ -266,6 +266,13 @@ std::vector<uint8_t> CommunicationSystem::preparePayload() {
     std::vector<uint8_t> envData = envState.serialize();
     std::vector<uint8_t> systemData = system.serialize();
 
+    // 2. Validate sizes before packing
+    const size_t envSize = envData.size();
+    
+    if (envSize < 49) { // Match Python expected minimum
+        std::cerr << "Environment data too small: " << envSize << std::endl;
+    }
+
     // Create combined payload with length headers
     std::vector<uint8_t> payload;
     payload.reserve(envData.size() + systemData.size() + 2*sizeof(uint32_t));

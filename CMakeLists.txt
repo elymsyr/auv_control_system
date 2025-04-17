@@ -16,7 +16,6 @@ find_package(ZLIB REQUIRED)
 # Add executable target with source files
 add_executable(control_system
     src/main.cpp
-    src/mission_system.cpp
     src/sensor_system.cpp
     src/control_system.cpp
     src/communication_system.cpp
