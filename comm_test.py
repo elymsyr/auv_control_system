@@ -37,7 +37,7 @@ def handleMessage(number, success, mode, order):
         return f"{success} {mode} {order}"
 
 class UnderwaterVehicleGUI:
-    def __init__(self, root, key_file="/home/eren/GitHub/underwater/UnderwaterVehicleControl/encryption_keys.bin"):
+    def __init__(self, root, key_file="/home/eren/GitHub/ControlSystem/encryption_keys.bin"):
         self.root = root
         self.root.title("Underwater Vehicle Control")
         self.root.geometry("800x600")

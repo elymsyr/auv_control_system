@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/home/eren/GitHub/ControlSystem/build/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

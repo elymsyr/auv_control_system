@@ -1,5 +1,5 @@
 {
-    "cmake.sourceDirectory": "/home/eren/GitHub/underwater/UnderwaterVehicleControl",
+    "cmake.sourceDirectory": "/home/eren/GitHub/ControlSystem",
     "files.associations": {
         "algorithm": "cpp",
         "cmath": "cpp",

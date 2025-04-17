@@ -26,7 +26,7 @@ bool CommunicationSystem::midInit() {
     sender.store(true);
     receiver.store(true);
     try {
-        readEncryptionKeys("/home/eren/GitHub/underwater/UnderwaterVehicleControl/encryption_keys.bin");
+        readEncryptionKeys("/home/eren/GitHub/ControlSystem/encryption_keys.bin");
         setupConnection();
         return connectionSocket >= 0;
     } catch (const std::exception& e) {
