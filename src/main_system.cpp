@@ -49,8 +49,8 @@ void MainSystem::init(int order) {
             continue;
         }
 
-        checkSubsystemHealth();
         std::this_thread::sleep_for(std::chrono::seconds(1));
+        checkSubsystemHealth();
 
         auto [system, option, control, mode, order] = groundCommand.read();
 
@@ -210,5 +210,9 @@ void MainSystem::checkSubsystemHealth() {
 }
 
 void MainSystem::handleSubsystemFailure(Subsystem* subsystem) {
+    if(subsystem->restarting.load()) {
+        std::cout << "Subsystem is already restarting." << std::endl;
+        return;
+    }
     subsystem->restart();
 }

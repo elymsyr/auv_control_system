@@ -16,9 +16,9 @@
 #include <zlib.h>
 
 CommunicationSystem::CommunicationSystem(std::string name, int runtime, SystemData& system, int order,
-                      EnvironmentState& envState, SharedGroundCommand& groundCommand)
+                    EnvironmentState& envState, SharedGroundCommand& groundCommand)
     : Subsystem(name, runtime, system, order), envState(envState), 
-      groundCommand(groundCommand), connectionSocket(-1) {}
+    groundCommand(groundCommand), connectionSocket(-1) {}
 
 CommunicationSystem::~CommunicationSystem() { halt(); }
 
@@ -37,10 +37,10 @@ bool CommunicationSystem::midInit() {
 
 void CommunicationSystem::liveLoop() {
     if (!senderThread.joinable()) {
-        senderThread = std::thread(&CommunicationSystem::senderLoop, this);
+    senderThread.move(std::thread(&CommunicationSystem::senderLoop, this));
     }
     if (!receiverThread.joinable()) {
-        receiverThread = std::thread(&CommunicationSystem::receiverLoop, this);
+    receiverThread.move(std::thread(&CommunicationSystem::receiverLoop, this));
     }
 }
 
@@ -62,9 +62,9 @@ void CommunicationSystem::midHalt() {
             t.join();
         }
     };
-    
-    safeJoin(senderThread);
-    safeJoin(receiverThread);
+
+    senderThread.join();
+    receiverThread.join();
 
     if (encryptCtx) EVP_CIPHER_CTX_free(encryptCtx);
     if (decryptCtx) EVP_CIPHER_CTX_free(decryptCtx);
@@ -93,7 +93,7 @@ void CommunicationSystem::setupConnection() {
     FD_ZERO(&set);
     FD_SET(sock, &set);
     timeval timeout{.tv_sec = 5, .tv_usec = 0};
-    
+
     if (select(sock + 1, nullptr, &set, nullptr, &timeout) <= 0) {
         close(sock);
         throw std::runtime_error("Connection timeout");
@@ -118,6 +118,8 @@ void CommunicationSystem::setupConnection() {
 }
 
 void CommunicationSystem::senderLoop() {
+    constexpr auto SEND_INTERVAL = std::chrono::milliseconds(500);
+
     while (initialized.load()) {
         while (sender.load()) {
             try {
@@ -133,7 +135,7 @@ void CommunicationSystem::senderLoop() {
                 }
 
                 auto start = std::chrono::steady_clock::now();
-                
+
                 std::vector<uint8_t> payload = preparePayload();
                 std::vector<uint8_t> compressed = compressData(payload);
                 std::vector<uint8_t> encrypted = encryptMessage(compressed);
@@ -142,8 +144,8 @@ void CommunicationSystem::senderLoop() {
                 } else {
                     updateHeartbeat();
                 }
-                
-                std::this_thread::sleep_until(start + runtime + std::chrono::milliseconds(100));
+
+                std::this_thread::sleep_until(start + SEND_INTERVAL);
             }
             catch (const std::exception& e) {
                 std::cerr << "Sender error: " << e.what() << std::endl;
@@ -161,10 +163,10 @@ bool CommunicationSystem::sendData(const std::vector<uint8_t>& data, int socket)
         fd_set writeSet;
         FD_ZERO(&writeSet);
         FD_SET(socket, &writeSet); // Use passed socket
-        
+
         timeval timeout{.tv_sec = 5, .tv_usec = 0};
         int ready = select(socket + 1, nullptr, &writeSet, nullptr, &timeout);
-        
+
         if (ready <= 0) return false;
 
         ssize_t sent = send(socket, buffer + totalSent, remaining, MSG_NOSIGNAL);
@@ -172,7 +174,7 @@ bool CommunicationSystem::sendData(const std::vector<uint8_t>& data, int socket)
             if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
             return false;
         }
-        
+
         totalSent += sent;
         remaining -= sent;
     }
@@ -190,7 +192,7 @@ void CommunicationSystem::receiverLoop() {
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     continue;
                 }
-                auto start = std::chrono::steady_clock::now();
+
                 ssize_t bytesReceived = recv(connectionSocket, readBuffer.data(), readBuffer.size(), 0);
                 if (bytesReceived > 0) {
                     receiveBuffer.insert(receiveBuffer.end(), readBuffer.begin(), readBuffer.begin() + bytesReceived);
@@ -225,7 +227,6 @@ void CommunicationSystem::receiverLoop() {
                         continue;
                     }
                 }
-                std::this_thread::sleep_until(start + runtime);
 
             } catch (const std::exception& e) {
                 std::cerr << "Receiver error: " << e.what() << std::endl;
@@ -243,7 +244,7 @@ void CommunicationSystem::restartConnection() {
             connectionSocket = -1;
         }
     }
-    
+
     for (int attempt = 0; attempt < 3; ++attempt) {
         try {
             if (midInit()) {liveLoop(); updateHeartbeat();};
@@ -272,15 +273,15 @@ std::vector<uint8_t> CommunicationSystem::preparePayload() {
     // Add environment data with length prefix
     uint32_t envLen = htonl(static_cast<uint32_t>(envData.size()));
     payload.insert(payload.end(), 
-                  reinterpret_cast<uint8_t*>(&envLen),
-                  reinterpret_cast<uint8_t*>(&envLen) + sizeof(envLen));
+                reinterpret_cast<uint8_t*>(&envLen),
+                reinterpret_cast<uint8_t*>(&envLen) + sizeof(envLen));
     payload.insert(payload.end(), envData.begin(), envData.end());
 
     // Add system data with length prefix
     uint32_t sysLen = htonl(static_cast<uint32_t>(systemData.size()));
     payload.insert(payload.end(),
-                  reinterpret_cast<uint8_t*>(&sysLen),
-                  reinterpret_cast<uint8_t*>(&sysLen) + sizeof(sysLen));
+                reinterpret_cast<uint8_t*>(&sysLen),
+                reinterpret_cast<uint8_t*>(&sysLen) + sizeof(sysLen));
     payload.insert(payload.end(), systemData.begin(), systemData.end());
 
     return payload;
@@ -322,7 +323,7 @@ std::vector<uint8_t> CommunicationSystem::encryptMessage(const std::vector<uint8
 
     // Encrypt plaintext
     if (EVP_EncryptUpdate(encryptCtx, ciphertext.data(), &ciphertext_len,
-                         message.data(), message.size()) != 1) {
+                        message.data(), message.size()) != 1) {
         throw std::runtime_error("Encryption failed");
     }
 
@@ -338,7 +339,7 @@ std::vector<uint8_t> CommunicationSystem::encryptMessage(const std::vector<uint8
     }
 
     std::vector<uint8_t> result(iv.size() + ciphertext_len + tag.size());
-    
+
     // Copy components using memcpy for exact size control
     uint8_t* ptr = result.data();
     memcpy(ptr, iv.data(), iv.size());
@@ -364,10 +365,10 @@ std::vector<uint8_t> CommunicationSystem::decryptMessage(const uint8_t* cipherte
 
     // Reset context
     EVP_CIPHER_CTX_reset(decryptCtx);
-    
+
     // Initialize with cipher, key and IV
     if (1 != EVP_DecryptInit_ex(decryptCtx, EVP_aes_256_gcm(), 
-                               nullptr, encryptionKey, iv)) {
+                            nullptr, encryptionKey, iv)) {
         throw std::runtime_error("Decryption init failed");
     }
 
@@ -375,7 +376,7 @@ std::vector<uint8_t> CommunicationSystem::decryptMessage(const uint8_t* cipherte
     std::vector<uint8_t> plaintext(encrypted_len + 16);
     int len;
     if (1 != EVP_DecryptUpdate(decryptCtx, plaintext.data(), &len, 
-                              encrypted, encrypted_len)) {
+                            encrypted, encrypted_len)) {
         throw std::runtime_error("Decryption failed");
     }
     int plaintext_len = len;
@@ -400,7 +401,7 @@ std::vector<uint8_t> CommunicationSystem::decryptMessage(const uint8_t* cipherte
 
 void CommunicationSystem::readEncryptionKeys(const std::string& keyFile) {
     namespace fs = std::filesystem;
-    
+
     try {
         if (!fs::exists(keyFile)) {
             throw std::runtime_error("Key file not found: " + keyFile);
@@ -416,7 +417,7 @@ void CommunicationSystem::readEncryptionKeys(const std::string& keyFile) {
         }
 
         // Initialize encryption context
-        encryptCtx = EVP_CIPHER_CTX_new();
+        encryptCtx.reset();
         if (!encryptCtx) {
             throw std::runtime_error("Failed to create encryption context");
         }
@@ -428,7 +429,7 @@ void CommunicationSystem::readEncryptionKeys(const std::string& keyFile) {
         }
 
         // Initialize decryption context
-        decryptCtx = EVP_CIPHER_CTX_new();
+        decryptCtx.reset();
         if (!decryptCtx) {
             throw std::runtime_error("Failed to create decryption context");
         }
@@ -445,9 +446,8 @@ void CommunicationSystem::readEncryptionKeys(const std::string& keyFile) {
         }
     }
     catch (const std::exception& e) {
-        if (encryptCtx) EVP_CIPHER_CTX_free(encryptCtx);
-        if (decryptCtx) EVP_CIPHER_CTX_free(decryptCtx);
-        encryptCtx = decryptCtx = nullptr;
+        encryptCtx.cleanup();
+        decryptCtx.cleanup();
         throw;
     }
 }
@@ -493,7 +493,7 @@ std::vector<uint8_t> CommunicationSystem::decompressData(const std::vector<uint8
 
     std::vector<uint8_t> output(4096);
     int ret;
-    
+
     do {
         if (zs.total_out >= output.size()) {
             output.resize(output.size() * 2);

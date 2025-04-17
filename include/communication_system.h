@@ -8,6 +8,7 @@
 #include <thread>
 #include <string>
 #include "shared_data.h"
+#include "resource_wrappers.h"
 
 class CommunicationSystem : public Subsystem {
 protected:
@@ -27,14 +28,14 @@ public:
     EnvironmentState& envState;
     SharedGroundCommand& groundCommand;
     std::mutex connectionMutex;
-    int connectionSocket = -1;
+    int connectionSocket;
     
     unsigned char encryptionKey[32];
-    EVP_CIPHER_CTX* encryptCtx;
-    EVP_CIPHER_CTX* decryptCtx;
+    CipherContext encryptCtx;
+    CipherContext decryptCtx;
     
-    std::thread senderThread;
-    std::thread receiverThread;
+    ThreadGuard senderThread;
+    ThreadGuard receiverThread;
 
     void setupConnection();
     void readEncryptionKeys(const std::string& keyFile);

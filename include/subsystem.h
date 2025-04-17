@@ -13,11 +13,11 @@ class Subsystem {
 protected:
     std::atomic<bool> live{false};
     std::atomic<bool> initialized{false};
-    std::atomic<bool> restarting{false};
     std::atomic<time_t> lastHeartbeat{0};
     std::thread loopThread;
 
 public:
+    std::atomic<bool> restarting{false};
     Subsystem(const std::string& name, int runtime, SystemData& system, int order) : name(name), runtime(std::chrono::milliseconds(runtime)), system(system), order(order) {}
     virtual ~Subsystem() { if (loopThread.joinable()) loopThread.join(); }
     std::chrono::milliseconds runtime;
