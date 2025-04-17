@@ -1,0 +1,21 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/home/eren/GitHub/ControlSystem",
+                "/home/eren/GitHub/ControlSystem/include",
+                "/usr/include",
+                "/usr/local/include",
+                "${CONDA_PREFIX}/include"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/clang-18",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-clang-x64"
+        }
+    ],
+    "version": 4
+}
