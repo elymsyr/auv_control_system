@@ -77,20 +77,20 @@ void MainSystem::handleCommand(int system, int option, int control, int mode, in
                             init(order);
                             break;
                         case 1:
-                            std::cout << "Mode command received: mode=1 (suspend)" << std::endl;
-                            suspend(order);
-                            break;
-                        case 2:
-                            std::cout << "Mode command received: mode=2 (shutdown)" << std::endl;
-                            shutdown(order);
-                            break;
-                        case 3:
                             std::cout << "Mode command received: mode=3 (resume)" << std::endl;
                             resume(order);
                             break;
-                        case 4:
+                        case 2:
+                            std::cout << "Mode command received: mode=1 (suspend)" << std::endl;
+                            suspend(order);
+                            break;
+                        case 3:
                             std::cout << "Mode command received: mode=4 (restart)" << std::endl;
                             restart(order);
+                            break;
+                        case 4:
+                            std::cout << "Mode command received: mode=2 (shutdown)" << std::endl;
+                            shutdown(order);
                             break;
                         case 5:
                             std::cout << "Mode command received: mode=5 (checkSubsystemHealth)" << std::endl;
@@ -171,7 +171,7 @@ void MainSystem::restart(int order) {
             order -= 1;
         }
     } else {
-        subsystems[order-1]->suspend();
+        subsystems[order-1]->restart();
     }
 }
 

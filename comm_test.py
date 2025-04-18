@@ -21,7 +21,7 @@ MODE = {
     0: "initialized",
     1: "halted",
     2: "suspended",
-    3: "resumed",
+    3: "running",
     4: "restarted",
 }
 
@@ -47,13 +47,7 @@ class UnderwaterVehicleGUI:
         self.notification_flags = {"environment": False, "system": False}
         self.host = '127.0.0.1'
         self.port = 8080
-        self.system_order = {
-            'All': 0,
-            'CommunicationSystem': 1,
-            'EnvironmentSystem': 2,
-            'MotionSystem': 3,
-            'ControlSystem': 4
-        }
+        self.system_order = {v: k for k, v in ORDER.items()}
 
         self.MESSAGES = {
             (2, 2): {
@@ -146,14 +140,14 @@ class UnderwaterVehicleGUI:
             
             self.state_labels[system] = (init_label, live_label)
 
-            actions = ['init', 'reset', 'suspend', 'resume', 'halt']
-            for col, action in enumerate(actions, start=3):
+            actions = ['init', 'resume', 'suspend', 'reset', 'halt']
+            for col, action in enumerate(actions):
                 btn = ttk.Button(
                     states_frame,
                     text=action,
-                    command=lambda sys=system, act=action: self.send_system_command(sys, act)
+                    command=lambda sys=system, act=col: self.send_system_command(sys, act)
                 )
-                btn.grid(row=row, column=col, padx=2, pady=2)
+                btn.grid(row=row, column=col+3, padx=2, pady=2)
             
             row += 1
 
@@ -165,8 +159,8 @@ class UnderwaterVehicleGUI:
             font=('Consolas', 10),
             height=10
         )
-        self.sys_text.grid(row=6, column=0, rowspan=6, columnspan=9, sticky='nsew', pady=10)
-        
+        self.sys_text.grid(row=row, column=0, rowspan=6, columnspan=9, sticky='nsew', pady=10)
+
         # Configure grid weights for proper expansion
         states_frame.grid_rowconfigure(6, weight=1)
         for col in range(10):
@@ -219,42 +213,47 @@ class UnderwaterVehicleGUI:
         # -----------------------------------------------
 
         buttons_frame = ttk.Frame(states_frame)
-        buttons_frame.grid(row=6, column=9, rowspan=5, sticky='ew', pady=0, padx=0)
+        buttons_frame.grid(row=row, column=9, rowspan=5, sticky='ew', pady=0, padx=0)
         
         btn = ttk.Button(
             buttons_frame,
             text="Test",
             command=lambda sys=system, act=action: self.send_mission_command()
         )
-        btn.grid(row=6, column=col, padx=2, pady=2)
+        btn.grid(row=row, column=col, padx=2, pady=2)
+        row += 1
 
         btn = ttk.Button(
             buttons_frame,
             text="Test",
             command=lambda sys=system, act=action: self.send_mission_command()
         )
-        btn.grid(row=7, column=col, padx=2, pady=2)
+        btn.grid(row=row, column=col, padx=2, pady=2)
+        row += 1
 
         btn = ttk.Button(
             buttons_frame,
             text="Test",
             command=lambda sys=system, act=action: self.send_mission_command()
         )
-        btn.grid(row=8, column=col, padx=2, pady=2)
+        btn.grid(row=row, column=col, padx=2, pady=2)
+        row += 1
 
         btn = ttk.Button(
             buttons_frame,
             text="Test",
             command=lambda sys=system, act=action: self.send_mission_command()
         )
-        btn.grid(row=9, column=col, padx=2, pady=2)
+        btn.grid(row=row, column=col, padx=2, pady=2)
+        row += 1
 
         btn = ttk.Button(
             buttons_frame,
             text="Test",
             command=lambda sys=system, act=action: self.send_mission_command()
         )
-        btn.grid(row=10, column=col, padx=2, pady=2)
+        btn.grid(row=row, column=col, padx=2, pady=2)
+        row += 1
 
         # Command history at bottom
         cmd_frame = ttk.Frame(main_frame)
@@ -289,14 +288,7 @@ class UnderwaterVehicleGUI:
 
     def send_system_command(self, system, action):
         system_code = self.system_order.get(system, 0)
-        action_codes = {
-            'init': 0,
-            'reset': 4,
-            'suspend': 1,
-            'resume': 3,
-            'halt': 2
-        }
-        code = 10000 + system_code + action_codes.get(action, 0) * 10
+        code = 10000 + system_code + action * 10
         self.send_command(code=code)
 
     def send_mission_command(self, option = 0, mode = 0, order = 0):
@@ -337,9 +329,7 @@ class UnderwaterVehicleGUI:
     def update_system_states_gui(self):
         all_init = 1
         all_run = 1
-        step = 0
-        for system, (init_label, live_label) in self.state_labels.items():
-            if step == 0: continue
+        for system, (init_label, live_label) in list(self.state_labels.items())[1:]:
             state = self.system_states.get(system, [0, 0])
             init_color = 'green' if state[0] == 1 else 'red'
             if state[0] != 1:
@@ -349,7 +339,6 @@ class UnderwaterVehicleGUI:
                 all_run = 0
             init_label.config(bg=init_color)
             live_label.config(bg=live_color)
-            step += 1
         self.state_labels['All'][0].config(bg='green' if all_init else 'red')
         self.state_labels['All'][1].config(bg='green' if all_run else 'red')
 

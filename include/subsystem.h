@@ -36,7 +36,7 @@ public:
     virtual void midSuspend() { system.addPacket(0, 0, 1, 2, order); return; }
     virtual void resume() { bool post = preResume();  if (post) {midResume(); } }
     virtual void midResume() { system.addPacket(0, 0, 1, 3, order); return; }
-    virtual void restart() { if (!restarting.load()) {system.addPacket(1, 9, 0, 2, order); halt(); init();}; }
+    virtual void restart() { if (!restarting.load()) {restarting.store(true); system.addPacket(1, 9, 0, 2, order); halt(); init(); restarting.store(false); }}
     virtual void liveLoop() = 0;
     virtual void updateHeartbeat() { lastHeartbeat = time(nullptr); }
     time_t getLastHeartbeat() const { return lastHeartbeat; }
