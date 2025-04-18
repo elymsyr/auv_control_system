@@ -2,7 +2,7 @@
 
 - [ ] Explicit MPC
 - [ ] ZeroMQ 
-- [ ] ROS-like communication
+- [ ] ROS-like communication -> https://medium.com/@connecttosaurabh.verma/building-a-robust-publish-subscribe-mechanism-in-c-6735a7055eef
 - [ ] Better communication with ground unit
 
 # Plans 1
