@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 cmake_policy(SET CMP0167 NEW)
 
 # Find dependencies first
+find_package(casadi REQUIRED)
 find_package(Boost 1.65 REQUIRED COMPONENTS system)
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -29,6 +30,7 @@ add_executable(control_system
 # Target-specific include directories
 target_include_directories(control_system PRIVATE
     include
+    ${casadi_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
     ${OPENSSL_INCLUDE_DIR}
     ${ZLIB_INCLUDE_DIRS}
@@ -36,6 +38,7 @@ target_include_directories(control_system PRIVATE
 
 # Target link libraries using modern CMake targets
 target_link_libraries(control_system PRIVATE
+    ${casadi_LIBRARIES}
     Boost::system
     OpenSSL::SSL
     OpenSSL::Crypto

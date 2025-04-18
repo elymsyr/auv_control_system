@@ -24,14 +24,5 @@ void MotionSystem::liveLoop() {
 }
 
 void MotionSystem::motionControlLoop() {
-    // auto current = envState.getCurrentState();
-    // auto desired = envState.getDesiredState();
-    // // std::cout << "Current Position: " 
-    // //           << current.temperature << ", " 
-    // //           << current.depth << std::endl;
-    // calculateMotionCommands();
-}
 
-void MotionSystem::calculateMotionCommands() {
-    // Implement motion control algorithms
 }

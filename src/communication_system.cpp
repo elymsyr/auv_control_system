@@ -44,6 +44,8 @@ void CommunicationSystem::liveLoop() {
     }
 }
 
+bool CommunicationSystem::isLive() const { return sender.load() && receiver.load(); }
+
 void CommunicationSystem::midHalt() {
     sender.store(false);
     receiver.store(false);

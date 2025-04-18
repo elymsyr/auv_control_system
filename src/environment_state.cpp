@@ -70,7 +70,8 @@ std::vector<uint8_t> EnvironmentState::serialize() {
     return buffer;
 }
 
-void EnvironmentState::pack_state(const auto& s, std::vector<uint8_t>& buf) {
+template <typename T>
+void EnvironmentState::pack_state(const T& s, std::vector<uint8_t>& buf) {
     auto append_double = [&buf](double value) {
         uint8_t bytes[sizeof(double)];
         std::memcpy(bytes, &value, sizeof(double));

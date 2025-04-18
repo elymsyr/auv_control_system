@@ -10,7 +10,7 @@ import struct
 import traceback
 
 ORDER = {
-    0: "ALL",
+    0: "All",
     1: "CommunicationSystem",
     2: "EnvironmentSystem",
     3: "MotionSystem",
@@ -335,12 +335,23 @@ class UnderwaterVehicleGUI:
             self.log_message(f"Send failed: {str(e)}", 'error')
 
     def update_system_states_gui(self):
+        all_init = 1
+        all_run = 1
+        step = 0
         for system, (init_label, live_label) in self.state_labels.items():
+            if step == 0: continue
             state = self.system_states.get(system, [0, 0])
             init_color = 'green' if state[0] == 1 else 'red'
+            if state[0] != 1:
+                all_init = 0
             live_color = 'green' if state[1] == 1 else 'red'
+            if state[1] != 1:
+                all_run = 0
             init_label.config(bg=init_color)
             live_label.config(bg=live_color)
+            step += 1
+        self.state_labels['All'][0].config(bg='green' if all_init else 'red')
+        self.state_labels['All'][1].config(bg='green' if all_run else 'red')
 
     def setup_communication(self):
         try:

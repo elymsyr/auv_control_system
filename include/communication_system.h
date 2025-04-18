@@ -23,6 +23,7 @@ public:
     void midHalt() override;
     void midResume() override;
     void liveLoop() override;
+    bool isLive() const override;
     
     private:
     EnvironmentState& envState;

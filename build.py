@@ -10,8 +10,9 @@ def main():
 
         cmake -DBOOST_ROOT=$CONDA_PREFIX \
             -DCMAKE_CXX_COMPILER=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-c++ \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH=$CONDA_PREFIX ..
+            -Dcasadi_DIR=$CONDA_PREFIX/lib/cmake/casadi \
+            -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
+            -DCMAKE_BUILD_TYPE=Release ..
 
         make -j4
         ./control_system

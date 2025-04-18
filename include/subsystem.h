@@ -22,7 +22,7 @@ public:
     virtual ~Subsystem() { if (loopThread.joinable()) loopThread.join(); }
     std::chrono::milliseconds runtime;
     SystemData& system;
-    bool isLive() const { return live.load(); }
+    virtual bool isLive() const { return live.load(); }
     bool isRunning() const { return initialized.load() && live.load(); }
     bool isInitialized() const { return initialized.load(); }
     std::string getName() const { return name; }
