@@ -42,19 +42,16 @@ public:
     time_t getLastHeartbeat() const { return lastHeartbeat; }
 
 
-    double timer = std::chrono::duration<double>(
-        std::chrono::steady_clock::now().time_since_epoch())
-        .count();
+    std::chrono::steady_clock::time_point timer = std::chrono::steady_clock::now();
     
     void reset_timer() {
-        timer = std::chrono::duration<double>(
-            std::chrono::steady_clock::now().time_since_epoch())
-            .count();
+        timer = std::chrono::steady_clock::now();
     }
 
     void sleep_til(int extra = 0){
-        std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int64_t>(timer) + runtime.count() + extra));
+        std::this_thread::sleep_until(timer + runtime + std::chrono::milliseconds(extra));
     }
+
 private:
     void printNameProcess(std::string process) const {
         std::cout << process << ": " << name << std::endl;

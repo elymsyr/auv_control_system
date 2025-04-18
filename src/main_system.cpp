@@ -117,29 +117,25 @@ void MainSystem::handleCommand(int system, int option, int control, int mode, in
                     std::cout << "Option command received: option=0" << std::endl;
                     switch (mode) {
                         case 0:
-                            std::cout << "Mode command received: mode=0" << std::endl;
-                            std::cout << "Sending mission information..." << std::endl;
+                            std::cout << "Generating mission report..." << std::endl;
                             break;
                             // sendMissionInfo();
                         case 1:
-                            std::cout << "Setting mission mode to " << mode << std::endl;
+                            std::cout << "Setting mission mode to " << order << std::endl;
                             break;
                             // setMissionMode(mode);
                         case 2:
-                            std::cout << "Starting mission..." << std::endl;
+                            std::cout << "Initializing mission..." << std::endl;
                             break;
                             // startMission();
                         case 3:
-                            std::cout << "Generating mission report..." << std::endl;
+                            std::cout << "Starting mission..." << std::endl;
                             break;
                             // generateMissionReport(mode == 1);
                         case 4:
-                            std::cout << "Testing mission systems..." << std::endl;
+                            std::cout << "Stopping mission..." << std::endl;
                             break;
                             // testMissionSystems();
-                        case 5:
-                            std::cout << "Unknown mission control code: " << control << std::endl;
-                            break;
                     }
             }
         default:
@@ -210,9 +206,10 @@ void MainSystem::checkSubsystemHealth() {
 }
 
 void MainSystem::handleSubsystemFailure(Subsystem* subsystem) {
-    // if(subsystem->restarting.load()) {
-    //     std::cout << "Subsystem is already restarting." << std::endl;
-    //     return;
-    // }
+    if(subsystem->restarting.load()) {
+        return;
+    }
+    subsystem->restarting.store(true);
     subsystem->restart();
+    subsystem->restarting.store(false);
 }

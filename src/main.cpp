@@ -19,9 +19,9 @@ int main() {
     MainSystem mainSystem(systemData, environmentData, sharedGroundCommand);
     
     CommunicationSystem commSystem("CommunicationSystem", 500, systemData, 1, environmentData, sharedGroundCommand);
-    EnvironmentSystem envSystem("EnvironmentSystem", 200, systemData, 3, environmentData);
-    MotionSystem motionSystem("MotionSystem", 200, systemData, 4, environmentData, sharedSignalData);
-    ControlSystem controlSystem("ControlSystem", 200, systemData, 5, sharedSignalData);
+    EnvironmentSystem envSystem("EnvironmentSystem", 200, systemData, 2, environmentData);
+    MotionSystem motionSystem("MotionSystem", 200, systemData, 3, environmentData, sharedSignalData);
+    ControlSystem controlSystem("ControlSystem", 200, systemData, 4, sharedSignalData);
 
     mainSystem.makeSystem({&commSystem, &envSystem, &motionSystem, &controlSystem});
     mainSystem.init(1);
