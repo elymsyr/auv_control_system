@@ -84,6 +84,7 @@
         "variant": "cpp",
         "coroutine": "cpp",
         "future": "cpp",
-        "cerrno": "cpp"
+        "cerrno": "cpp",
+        "*.ipp": "cpp"
     }
 }

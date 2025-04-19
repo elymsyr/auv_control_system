@@ -1,26 +1,46 @@
-#ifndef CONTROL_SYSTEM_H
-#define CONTROL_SYSTEM_H
+#ifndef MOTION_H
+#define MOTION_H
 
 #include "subsystem.h"
-#include "shared_data.h"
-#include <boost/lockfree/spsc_queue.hpp>
+#include "topics.hpp"
+#include "communication_system.h"
+#include <iostream>
+#include <chrono>
+#include <zmq_addon.hpp>
+#include <any>
 
 class ControlSystem : public Subsystem {
-private:
-    boost::lockfree::spsc_queue<SignalData> commandQueue{50};
-
+    Subscriber<MotionTopic> motion_sub_;
+    Subscriber<SignalTopic> signal_sub_;
+    
 public:
-    explicit ControlSystem(std::string name, int runtime, SystemData& system, int order, SharedSignalData& signalData);
-    bool midInit() override;
-    // void midSuspend() override;
-    void midHalt() override;
-    // void midResume() override;
-    void liveLoop() override;
-    SharedSignalData& signalData;
-    void pushCommand(const SignalData& cmd);
+    MotionTopic motion_state;
+    SignalTopic signal_state;
 
-private:
-    void executeControlCommands(const SignalData& cmd);
+    ControlSystem(std::string name = "Control", int runtime = 100, unsigned int system_code = 3) 
+        : Subsystem(name, runtime, system_code) 
+    {}
+
+    void init() override {
+        motion_sub_.connect("tcp://localhost:5563");
+        signal_sub_.connect("tcp://localhost:5562");
+        std::cout << name << " initialized\n";
+    }
+
+protected:
+    void function() override {
+        {
+            std::lock_guard lk(mtx);
+            motion_state.set(motion_sub_.receive());
+            signal_state.set(signal_sub_.receive());
+            system_state.set();
+        }
+    }
+
+    void postState() override {
+        std::shared_lock lock(topic_read_mutex);
+        state_pub_.publish(system_state);
+    }
 };
 
-#endif // CONTROL_SYSTEM_H
+#endif // MOTION_H

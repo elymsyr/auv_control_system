@@ -1,25 +1,48 @@
-#ifndef MOTION_SYSTEM_H
-#define MOTION_SYSTEM_H
+#ifndef MOTION_H
+#define MOTION_H
 
 #include "subsystem.h"
-#include "environment_state.h"
-#include "shared_data.h"
-#include "mission_system.h"
+#include "topics.hpp"
+#include "communication_system.h"
+#include <iostream>
+#include <chrono>
+#include <zmq_addon.hpp>
+#include <any>
 
-using Mission = MissionTemplate<VehicleModel, EnvironmentState>;
-
-class MotionSystem : public Subsystem
-{
+class MotionSystem : public Subsystem {
+    Publisher<MotionTopic> motion_pub_;
+    Subscriber<MissionTopic> mission_sub_;
+    
 public:
-    MotionSystem(std::string name, int runtime, SystemData &system, int order, EnvironmentState &envState, SharedSignalData &signalData);
-    SharedSignalData &signalData;
-    bool midInit() override;
-    void liveLoop() override;
+    MotionTopic motion_state;
+    MissionTopic mission_state;
 
-private:
-    std::unordered_map<int, Mission> missions;
-    EnvironmentState &envState;
-    void motionControlLoop();
+    MotionSystem(std::string name = "Motion", int runtime = 100, unsigned int system_code = 2) 
+        : Subsystem(name, runtime, system_code) 
+    {
+        motion_pub_.bind("tcp://*:5563");
+    }
+
+    void init() override {
+        mission_sub_.connect("tcp://localhost:5561");
+        std::cout << name << " initialized\n";
+    }
+
+protected:
+    void function() override {
+        {
+            std::lock_guard lk(mtx);
+            mission_state.set(mission_sub_.receive());
+            system_state.set();
+            motion_state.set();
+        }
+    }
+
+    void postState() override {
+        std::shared_lock lock(topic_read_mutex);
+        state_pub_.publish(system_state);
+        motion_pub_.publish(motion_state);
+    }
 };
 
-#endif // MOTION_SYSTEM_H
+#endif // MOTION_H

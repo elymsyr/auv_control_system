@@ -1,11 +1,15 @@
-# Plans 0
+<details>
+<summary><b><u><font size="5">Plans 0</font></u></b></summary>
 
 - [ ] Explicit MPC
 - [ ] ZeroMQ 
 - [ ] ROS-like communication -> https://medium.com/@connecttosaurabh.verma/building-a-robust-publish-subscribe-mechanism-in-c-6735a7055eef
 - [ ] Better communication with ground unit
 
-# Plans 1
+</details>
+
+<details>
+<summary><b><u><font size="5">Plans 1</font></u></b></summary>
 
 Here’s a high‑level roadmap and concrete techniques you can apply at each layer of your stack—algorithm, code, middleware and hardware—to squeeze out maximum speed and minimal footprint on a Jetson Nano.
 
@@ -307,8 +311,10 @@ Offload linear algebra to CUDA/cuBLAS.
 Rebuild with -O3 -march=… -flto.
 
 By rolling these changes in stages—and measuring after each—you should see cycle‐time drop by 2×–5× and far fewer jitter spikes on your Jetson Nano.
+</details>
 
-# Plans 2
+<details>
+<summary><b><u><font size="5">Plans 2</font></u></b></summary>
 
 To optimize your autonomous system for speed, efficiency, and lightweight operation on Jetson Nano, here's a structured approach:
 
@@ -452,7 +458,10 @@ public:
 
 These optimizations should be applied incrementally with thorough testing at each stage to verify real-world performance improvements on your specific hardware and workload.
 
-# Vehicle Control System Improvement Roadmap
+</details>
+
+<details>
+<summary><b><u><font size="5">Vehicle Control System Improvement Roadmap</font></u></b></summary>
 
 ## Core Architecture
 - [x] Implement RAII wrappers for all critical resources (OpenSSL contexts, socket handles, thread lifetimes)
@@ -555,9 +564,10 @@ These optimizations should be applied incrementally with thorough testing at eac
    - Example: Fetch recent JSON logs via an SSH/HTTPS interface.
 - [ ] Scan containers and binaries for vulnerabilities (Trivy or Clair)
    - Example: Fail deployment if a CVE > 7.0 is detected.
+</details>
 
-
-# Vehicle Control System Improvement Rollout Plan
+<details>
+<summary><b><u><font size="5">Vehicle Control System Improvement Rollout Plan</font></u></b></summary>
 
 This roadmap breaks the improvements into four incremental phases, ensuring core stability before adding advanced features or optimizations.
 
@@ -597,6 +607,6 @@ This roadmap breaks the improvements into four incremental phases, ensuring core
 23. **Create rollback mechanism & remote diagnostics**
 24. **Implement static analysis & coding standards enforcement**
 25. **Generate Doxygen docs & maintain CHANGELOG**
-
+</details>
 
 

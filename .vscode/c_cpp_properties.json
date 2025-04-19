@@ -6,6 +6,7 @@
                 "${workspaceFolder}/**",
                 "/home/eren/GitHub/ControlSystem",
                 "/home/eren/GitHub/ControlSystem/include",
+                "${workspaceFolder}/include",
                 "/usr/include",
                 "/usr/local/include",
                 "${CONDA_PREFIX}/include",

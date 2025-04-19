@@ -1,59 +1,68 @@
-#ifndef COMMUNICATION_SYSTEM_H
-#define COMMUNICATION_SYSTEM_H
+#ifndef COMMUNICATION_H
+#define COMMUNICATION_H
 
-#include "subsystem.h"
-#include "environment_state.h"
-#include <openssl/evp.h>
-#include <atomic>
-#include <thread>
-#include <string>
-#include "shared_data.h"
-#include "resource_wrappers.h"
+#pragma once
+#include <zmq.hpp>
+#include "topics.hpp"
 
-class CommunicationSystem : public Subsystem {
-protected:
-    std::atomic<bool> sender{false};
-    std::atomic<bool> receiver{false};
+class ZeroMQContext {
 public:
-    explicit CommunicationSystem(std::string name, int runtime, SystemData& system, int order, EnvironmentState& envState, SharedGroundCommand& groundCommand);
-    ~CommunicationSystem();
-    bool midInit() override;
-    void midSuspend() override;
-    void restart() override;
-    void midHalt() override;
-    void midResume() override;
-    void liveLoop() override;
-    bool isLive() const override;
-    
-    private:
-    EnvironmentState& envState;
-    SharedGroundCommand& groundCommand;
-    std::mutex connectionMutex;
-    int connectionSocket;
-    
-    unsigned char encryptionKey[32];
-    CipherContext encryptCtx;
-    CipherContext decryptCtx;
-    
-    ThreadGuard senderThread;
-    ThreadGuard receiverThread;
-
-    void setupConnection();
-    void readEncryptionKeys(const std::string& keyFile);
-    void senderLoop();
-    void receiverLoop();
-    bool reconnect();
-    std::vector<uint8_t> encryptMessage(const std::vector<uint8_t>& message);
-    std::vector<uint8_t> decryptMessage(const unsigned char* ciphertext, int length);
-
-    bool checkConnection();
-    bool sendData(const std::vector<uint8_t>& data, int socket);
-    void restartConnection();
-    std::vector<uint8_t> preparePayload();
-    void processReceivedData(const uint8_t* data, size_t length);
-    std::vector<uint8_t> compressData(const std::vector<uint8_t>& input);
-    std::vector<uint8_t> decompressData(const std::vector<uint8_t>& input);
-    std::vector<uint8_t> decryptMessage(const uint8_t* ciphertext, size_t length);
+    static zmq::context_t& get() {
+        static zmq::context_t instance(1);
+        return instance;
+    }
 };
 
-#endif
+// Base Publisher
+template <typename T>
+class Publisher {
+protected:
+    zmq::socket_t socket_;
+    
+public:
+    Publisher() : socket_(ZeroMQContext::get(), ZMQ_PUB) {}
+    
+    void bind(const std::string& endpoint) {
+        socket_.bind(endpoint);
+    }
+
+    void publish(const T& data) {
+        zmq::message_t topic_msg(data.TOPIC, strlen(data.TOPIC));
+        zmq::message_t content_msg;
+        Serialize<T>(content_msg, data);  // Pass data to serialize
+        
+        socket_.send(topic_msg, zmq::send_flags::sndmore);
+        socket_.send(content_msg, zmq::send_flags::none);
+    }
+};
+
+// Base Subscriber
+template <typename T>
+class Subscriber {
+protected:
+    zmq::socket_t socket_;
+    
+public:
+    Subscriber() : socket_(ZeroMQContext::get(), ZMQ_SUB) {}
+    
+    void connect(const std::string& endpoint) {
+        socket_.connect(endpoint);
+        socket_.set(zmq::sockopt::subscribe, T::TOPIC);
+    }
+
+    T receive() {
+        zmq::message_t topic, content;
+        
+        // Check both receive operations
+        if (!socket_.recv(topic)) {
+            throw std::runtime_error("Failed to receive topic");
+        }
+        if (!socket_.recv(content)) {
+            throw std::runtime_error("Failed to receive content");
+        }
+        
+        return T::Deserialize(content);
+    }
+};
+
+#endif // COMMUNICATION_H

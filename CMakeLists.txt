@@ -5,6 +5,17 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+find_package(PkgConfig)
+pkg_check_modules(PC_ZeroMQ QUIET zmq)
+find_path(ZeroMQ_INCLUDE_DIR
+        NAMES zmq.hpp
+        PATHS ${PC_ZeroMQ_INCLUDE_DIRS}
+        )
+find_library(ZeroMQ_LIBRARY
+        NAMES zmq
+        PATHS ${PC_ZeroMQ_LIBRARY_DIRS}
+        )
+
 find_path(CASADI_INCLUDE_DIR casadi/casadi.hpp HINTS $ENV{CASADI_PREFIX}/include)
 find_library(CASADI_LIBRARY NAMES casadi HINTS ${CASADI_INCLUDE_DIR}/../lib $ENV{CASADI_PREFIX}/lib)
 set(CASADI_LIBRARIES ${CASADI_LIBRARY})
@@ -19,6 +30,7 @@ find_package(ZLIB REQUIRED)
 include_directories(control_system PRIVATE
     include
     ${CASADI_INCLUDE_DIR}
+    ${ZeroMQ_INCLUDE_DIR}
     ${Boost_INCLUDE_DIRS}
     ${OPENSSL_INCLUDE_DIR}
     ${ZLIB_INCLUDE_DIRS}
@@ -38,6 +50,7 @@ add_executable(control_system
 
 target_link_libraries(control_system PRIVATE
     ${CASADI_LIBRARIES}
+    ${ZeroMQ_LIBRARY}
     Boost::system
     OpenSSL::SSL
     OpenSSL::Crypto
