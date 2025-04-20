@@ -73,6 +73,7 @@ public:
     void init() override {
         mission_sub_.connect("tcp://localhost:5561");
         env_sub_.connect("tcp://localhost:5560");
+        command_sub_.connect("tcp://localhost:8889");
         sub_system_connect();
         std::cout << name << " initialized\n";
     }
