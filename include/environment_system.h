@@ -19,7 +19,7 @@ public:
         env_publish = publish;
     }
 
-    EnvironmentSystem(std::string name = "Environment", int runtime = 100, unsigned int system_code = 0)
+    EnvironmentSystem(std::string name = "Environment", int runtime = 50, unsigned int system_code = 0)
         : Subsystem(name, runtime, system_code)
     {
         env_pub_.bind("tcp://*:5560");

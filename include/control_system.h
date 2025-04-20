@@ -1,5 +1,5 @@
-#ifndef MOTION_H
-#define MOTION_H
+#ifndef CONTROL_H
+#define CONTROL_H
 
 #include "subsystem.h"
 #include "topics.hpp"
@@ -43,4 +43,4 @@ protected:
     }
 };
 
-#endif // MOTION_H
+#endif // CONTROL_H

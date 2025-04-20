@@ -12,12 +12,14 @@
 class MotionSystem : public Subsystem {
     Publisher<MotionTopic> motion_pub_;
     Subscriber<MissionTopic> mission_sub_;
+    Subscriber<EnvironmentTopic> env_sub_;
     
 public:
     MotionTopic motion_state;
     MissionTopic mission_state;
+    EnvironmentTopic env_state;
 
-    MotionSystem(std::string name = "Motion", int runtime = 100, unsigned int system_code = 2) 
+    MotionSystem(std::string name = "Motion", int runtime = 200, unsigned int system_code = 2) 
         : Subsystem(name, runtime, system_code) 
     {
         motion_pub_.bind("tcp://*:5563");
@@ -25,6 +27,7 @@ public:
 
     void init() override {
         mission_sub_.connect("tcp://localhost:5561");
+        env_sub_.connect("tcp://localhost:5560");
         std::cout << name << " initialized\n";
     }
 
@@ -33,6 +36,7 @@ protected:
         {
             std::lock_guard lk(mtx);
             mission_state.set(mission_sub_.receive());
+            env_state.set(env_sub_.receive());
             system_state.set();
             motion_state.set();
         }

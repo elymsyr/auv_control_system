@@ -21,7 +21,7 @@ public:
         runtime(std::chrono::milliseconds(runtime)),
         system_code(system_code)
     {
-        state_pub_.bind("tcp://*:" + std::to_string(5550 + system_code));
+        bind_system_pub();
         worker = std::thread([this]{ this->workerLoop(); });
     }
     ~Subsystem() {
@@ -34,6 +34,9 @@ public:
             worker.join();
     }
 
+    virtual void bind_system_pub() {
+        state_pub_.bind("tcp://*:" + std::to_string(5550 + system_code));
+    }
     virtual void init() = 0;
     virtual void start() {
         {
@@ -53,6 +56,7 @@ public:
         {
           std::lock_guard lk(mtx);
           run_requested = false;
+          shutdown_requested = true;
         }
         cv_halt.notify_one();
     }
