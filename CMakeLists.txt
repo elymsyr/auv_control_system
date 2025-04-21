@@ -38,14 +38,11 @@ include_directories(control_system PRIVATE
 
 add_executable(control_system
     src/main.cpp
-    src/sensor_system.cpp
     src/control_system.cpp
-    src/communication_system.cpp
     src/main_system.cpp
-    src/environment_state.cpp
     src/environment_system.cpp
     src/motion_system.cpp
-    src/system_data.cpp
+    src/mission_system.cpp
 )
 
 target_link_libraries(control_system PRIVATE

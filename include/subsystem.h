@@ -63,7 +63,13 @@ public:
 
 private:
     virtual void function() = 0;
-    virtual void postState() = 0;
+    virtual void publish() = 0;
+    virtual void refresh_received() = 0;
+
+    virtual void notify(unsigned int system, unsigned int process, uint8_t message) {
+        system_state.set(system, process, message);
+        state_pub_.publish(system_state);
+    }
 
     void workerLoop() {
         std::unique_lock lk(mtx);
@@ -74,8 +80,9 @@ private:
             while (run_requested) {
                 lk.unlock();
                 auto start = std::chrono::high_resolution_clock::now();
+                refresh_received();
                 function();
-                postState();
+                publish();
                 std::this_thread::sleep_until(start + runtime);
                 lk.lock();
             }

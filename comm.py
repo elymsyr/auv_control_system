@@ -3,27 +3,14 @@ from tkinter import ttk, scrolledtext, messagebox
 from datetime import datetime
 import threading
 import zmq
+from codes import StateTopic, CommandTopic
 
-ORDER = {
-    0: "All",
-    1: "EnvironmentSystem",
-    2: "MissionSystem",
-    3: "MotionSystem",
-    4: "ControlSystem",
-}
-
-MODE = {
-    0: "initialized",
-    1: "halted",
-    2: "suspended",
-    3: "running",
-    4: "restarted",
-}
-
-SUCCESS = {
-    0: "Fail",
-    1: "Success",
-    2: "Already",
+__SYSTEM__ = {
+    0: "Main System",
+    1: "Environment System",
+    2: "Mission System",
+    3: "Motion System",
+    4: "Control System",
 }
 
 class UnderwaterVehicleGUI:
@@ -38,19 +25,6 @@ class UnderwaterVehicleGUI:
         self.command_port = 8889
         self.data_port = 8888
         self._init_zmq()
-        
-        self.system_states = {system: [0, 0] for system in ORDER.values()}
-        self.system_order = {v: k for k, v in ORDER.items()}
-        
-        self.MESSAGES = {
-            (2, 2): {(2, 2): "Shutting down..."},
-            (1, 9): {
-                (0, 0): "Health check failed",
-                (0, 1): "Loop detached",
-                (0, 2): "Restarting",
-                (0, 3): "Detached",
-            },
-        }
 
         self.create_widgets()
         self._start_receiver_thread()
@@ -72,6 +46,13 @@ class UnderwaterVehicleGUI:
         """Start data receiving thread"""
         self.connection_active = True
         threading.Thread(target=self._receive_data, daemon=True).start()
+
+    def _get_mission_code(self):
+        try:
+            return int(self.entry_var.get())
+        except ValueError:
+            self.log_message("Invalid mission code. Please enter a valid integer. 0 sent.", 'error')
+            return 0
 
     def create_widgets(self):
         main_frame = ttk.Frame(self.root)
@@ -123,7 +104,7 @@ class UnderwaterVehicleGUI:
 
         self.state_labels = {}
         row = 1
-        for system in list(ORDER.values())[1:]:  # Skip 'All'
+        for order, system in __SYSTEM__.items():
             ttk.Label(states_frame, text=system).grid(row=row, column=0, padx=5, pady=2, sticky=tk.W)
             
             init_label = tk.Label(states_frame, width=8, relief=tk.RIDGE)
@@ -131,19 +112,124 @@ class UnderwaterVehicleGUI:
             
             live_label = tk.Label(states_frame, width=8, relief=tk.RIDGE)
             live_label.grid(row=row, column=2, padx=5, pady=2)
-            
+
             self.state_labels[system] = (init_label, live_label)
 
-            actions = ['init', 'resume', 'suspend', 'reset', 'halt']
+            actions = ['init', 'start', 'stop', 'halt', 'reset']
             for col, action in enumerate(actions):
                 btn = ttk.Button(
                     states_frame,
                     text=action,
-                    command=lambda sys=system, act=col: self.send_system_command(sys, act)
+                    command=lambda sys=order, act=col: self.send_command(CommandTopic(system=sys, command=act))
                 )
                 btn.grid(row=row, column=col+3, padx=2, pady=2)
             
             row += 1
+
+        # Add system data text box at row 6
+        self.sys_text = scrolledtext.ScrolledText(
+            states_frame,
+            wrap=tk.WORD,
+            state='disabled',
+            font=('Consolas', 10),
+            height=10
+        )
+        self.sys_text.grid(row=row, column=0, rowspan=6, columnspan=9, sticky='nsew', pady=10)
+
+        # Configure grid weights for proper expansion
+        states_frame.grid_rowconfigure(6, weight=1)
+        for col in range(10):
+            states_frame.grid_columnconfigure(col, weight=1)
+
+        col = 9
+        self.entry_var = tk.StringVar()
+        entry_frame = ttk.Frame(states_frame)
+        entry_frame.grid(row=1, column=col, padx=5, pady=2, sticky=tk.W)
+
+        entry = ttk.Entry(entry_frame, textvariable=self.entry_var, width=3)
+        entry.pack(side=tk.LEFT, ipady=3, padx=(0, 2), pady=(2, 2))
+
+        mission_btn = ttk.Button(
+            entry_frame,
+            text="Set",
+            command=lambda : self.send_command(CommandTopic(system=6, command=self._get_mission_code()+250)),
+            width=5
+        )
+        mission_btn.pack(side=tk.LEFT, padx=0, pady=2)
+
+        btn = ttk.Button(
+            states_frame,
+            text="Init",
+            command=lambda sys=system, act=action: self.send_command(CommandTopic(system=6, command=0))
+        )
+        btn.grid(row=2, column=col, padx=2, pady=2)
+
+        btn = ttk.Button(
+            states_frame,
+            text="Start",
+            command=lambda sys=system, act=action: self.send_command(CommandTopic(system=6, command=1))
+        )
+        btn.grid(row=3, column=col, padx=2, pady=2)
+
+        btn = ttk.Button(
+            states_frame,
+            text="Stop",
+            command=lambda sys=system, act=action: self.send_command(CommandTopic(system=6, command=2))
+        )
+        btn.grid(row=4, column=col, padx=2, pady=2)
+
+        btn = ttk.Button(
+            states_frame,
+            text="Report",
+            command=lambda sys=system, act=action: self.send_command(CommandTopic(system=6, command=3))
+        )
+        btn.grid(row=5, column=col, padx=2, pady=2)
+        
+        # -----------------------------------------------
+
+        buttons_frame = ttk.Frame(states_frame)
+        buttons_frame.grid(row=row, column=9, rowspan=5, sticky='ew', pady=0, padx=0)
+        
+        btn = ttk.Button(
+            buttons_frame,
+            text="Test",
+            command=lambda sys=system, act=action: self.send_command()
+        )
+        btn.grid(row=row, column=col, padx=2, pady=2)
+        row += 1
+
+        btn = ttk.Button(
+            buttons_frame,
+            text="Test",
+            command=lambda sys=system, act=action: self.send_command()
+        )
+        btn.grid(row=row, column=col, padx=2, pady=2)
+        row += 1
+
+        btn = ttk.Button(
+            buttons_frame,
+            text="Test",
+            command=lambda sys=system, act=action: self.send_command()
+        )
+        btn.grid(row=row, column=col, padx=2, pady=2)
+        row += 1
+
+        btn = ttk.Button(
+            buttons_frame,
+            text="Test",
+            command=lambda sys=system, act=action: self.send_command()
+        )
+        btn.grid(row=row, column=col, padx=2, pady=2)
+        row += 1
+
+        btn = ttk.Button(
+            buttons_frame,
+            text="Test",
+            command=lambda sys=system, act=action: self.send_command()
+        )
+        btn.grid(row=row, column=col, padx=2, pady=2)
+        row += 1
+
 
         # Command history
         cmd_frame = ttk.Frame(main_frame)
@@ -176,30 +262,21 @@ class UnderwaterVehicleGUI:
             widget.tag_config('warning', foreground='orange')
             widget.tag_config('info', foreground='blue')
 
-    def send_system_command(self, system, action):
-        system_code = self.system_order.get(system, 0)
-        code = 10000 + system_code + action * 10
-        self.send_command(code=code)
-
-    def send_mission_command(self, option=0, mode=0, order=0):
-        code = 20000 + option*100 + mode*10 + order
-        self.send_command(code=code)
-
-    def send_command(self, code=None):
+    def send_command(self, command: CommandTopic = None):
+        if command is None:
+            try:
+                code = list(map(int, self.cmd_entry.get().split(':')))
+                if len(code) != 2:
+                    self.show_error("Invalid command format. Use 'system:command'.")
+                    return
+                command = CommandTopic(system=int(code[0]), command=int(code[1]))
+            except ValueError:
+                self.log_message("Invalid command format. Use 'system:command'.")
+                return
         try:
-            if code is None:
-                code = int(self.cmd_entry.get().strip())
-                
-            message = {
-                'command': code,
-                'timestamp': datetime.now().isoformat()
-            }
-            self.command_socket.send_json(message)
-
-            if code is None:
-                self.cmd_entry.delete(0, tk.END)
-
-            self.log_message(f"Sent command: {code}", 'info')
+            self.command_socket.send_json(command.__msg__())
+            self.cmd_entry.delete(0, tk.END)
+            self.log_message(f"Sent command: {command.__repr__()}", 'info')
         except Exception as e:
             self.log_message(f"Send failed: {str(e)}", 'error')
 

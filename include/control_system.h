@@ -17,30 +17,16 @@ public:
     MotionTopic motion_state;
     SignalTopic signal_state;
 
-    ControlSystem(std::string name = "Control", int runtime = 100, unsigned int system_code = 3) 
-        : Subsystem(name, runtime, system_code) 
-    {}
+    ControlSystem(std::string name = "Control", int runtime = 100, unsigned int system_code = 3);
 
-    void init() override {
-        motion_sub_.connect("tcp://localhost:5563");
-        signal_sub_.connect("tcp://localhost:5562");
-        std::cout << name << " initialized\n";
-    }
+    void init() override;
 
 protected:
-    void function() override {
-        {
-            std::lock_guard lk(mtx);
-            motion_state.set(motion_sub_.receive());
-            signal_state.set(signal_sub_.receive());
-            system_state.set();
-        }
-    }
+    void refresh_received() override;
 
-    void postState() override {
-        std::shared_lock lock(topic_read_mutex);
-        state_pub_.publish(system_state);
-    }
+    void function() override;
+
+    void publish() override;
 };
 
 #endif // CONTROL_H

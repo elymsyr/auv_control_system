@@ -64,8 +64,9 @@ struct MissionTopic {
 
 // State System Topic
 struct StateTopic {
-    unsigned int system_code : 3;
-    uint8_t message_code;
+    unsigned int system : 3;
+    unsigned int process : 3;
+    uint8_t message;
     std::time_t timestamp = std::time(nullptr);
 
     static constexpr const char* TOPIC = "State";
@@ -74,9 +75,29 @@ struct StateTopic {
         std::memcpy(this, &o, sizeof(*this));
     }
 
-    void set(unsigned int code = 0, uint8_t msg_code = 0) {
-        system_code = code & 0b111;
-        message_code = msg_code;
+    void set(unsigned int system_code = 0, unsigned int process_code = 0, uint8_t message_code = 0) {
+        system = system_code & 0b111;
+        process = process_code & 0b111;
+        message = message_code;
+        timestamp = std::time(nullptr);
+    }
+};
+
+// State System Topic
+struct CommandTopic {
+    unsigned int system : 3;
+    uint8_t command;
+    std::time_t timestamp = std::time(nullptr);
+
+    static constexpr const char* TOPIC = "Command";
+
+    inline void set(const CommandTopic& o) {
+        std::memcpy(this, &o, sizeof(*this));
+    }
+
+    void set(unsigned int system_code = 7, uint8_t command_code = 0) {
+        system = system_code & 0b111;
+        command = command_code;
         timestamp = std::time(nullptr);
     }
 };

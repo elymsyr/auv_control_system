@@ -19,34 +19,16 @@ public:
     MissionTopic mission_state;
     EnvironmentTopic env_state;
 
-    MotionSystem(std::string name = "Motion", int runtime = 200, unsigned int system_code = 2) 
-        : Subsystem(name, runtime, system_code) 
-    {
-        motion_pub_.bind("tcp://*:5563");
-    }
+    MotionSystem(std::string name = "Motion", int runtime = 200, unsigned int system_code = 2);
 
-    void init() override {
-        mission_sub_.connect("tcp://localhost:5561");
-        env_sub_.connect("tcp://localhost:5560");
-        std::cout << name << " initialized\n";
-    }
+    void init() override;
 
 protected:
-    void function() override {
-        {
-            std::lock_guard lk(mtx);
-            mission_state.set(mission_sub_.receive());
-            env_state.set(env_sub_.receive());
-            system_state.set();
-            motion_state.set();
-        }
-    }
+    void refresh_received() override;
 
-    void postState() override {
-        std::shared_lock lock(topic_read_mutex);
-        state_pub_.publish(system_state);
-        motion_pub_.publish(motion_state);
-    }
+    void function() override;
+
+    void publish() override;
 };
 
 #endif // MOTION_H
