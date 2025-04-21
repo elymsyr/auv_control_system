@@ -35,6 +35,7 @@ public:
     }
 
     virtual void init() {
+        _init();
         init_();
     }
 
@@ -42,7 +43,7 @@ public:
 
     virtual void _init() {
         try {
-            state_pub_.connect("tcp://*:5555");
+            state_pub_.connect("tcp://localhost:5555");
             worker = std::thread([this]{ this->workerLoop(); });
         }
         catch (const std::exception& e) {
@@ -84,20 +85,27 @@ private:
     }
 
     void workerLoop() {
+        std::cout << name << " worker called!\n";
         std::unique_lock lk(mtx);
         while (!shutdown_requested) {
             cv_run.wait(lk, [&]{ return run_requested || shutdown_requested; });
+            
             if (shutdown_requested) break;
-
+    
             while (run_requested) {
+                std::cout << name << " worker running!\n";
                 lk.unlock();
+                
+                // Main work cycle
                 auto start = std::chrono::high_resolution_clock::now();
                 function();
                 publish();
-                std::this_thread::sleep_until(start + runtime);
+                
+                // Sleep with periodic wakeup checks
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                
                 lk.lock();
             }
-            cv_halt.wait(lk, [&]{ return !run_requested || shutdown_requested; });
         }
     }
 

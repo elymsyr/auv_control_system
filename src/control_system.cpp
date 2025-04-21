@@ -11,6 +11,14 @@ void ControlSystem::init() {
 
 void ControlSystem::function() {
     // notify if any error occured
+    {
+        std::cout << "Propeller values: ";
+        std::shared_lock lock(topic_read_mutex);
+        for (double propeller_value : motion_state.propeller) {
+            std::cout << propeller_value;
+        }
+        std::cout << "\n";
+    }
 }
 
 void ControlSystem::publish() {}

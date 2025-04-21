@@ -14,6 +14,9 @@ void MotionSystem::init() {
 
 void MotionSystem::function() {
     // notify if any error occured
+    std::array<double, 6> propeller = {static_cast<double>(rand() % 10), static_cast<double>(rand() % 10), static_cast<double>(rand() % 10), static_cast<double>(rand() % 10), static_cast<double>(rand() % 8), static_cast<double>(rand() % 8)};
+    MotionTopic test;
+    test.set(propeller);
     motion_state.set();
 }
 

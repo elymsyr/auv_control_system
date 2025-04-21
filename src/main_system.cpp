@@ -63,7 +63,7 @@ void MainSystem::start_proxy() {
         backend.bind("tcp://*:8888");
         
         proxy_running_ = true;
-        zmq::proxy_steerable(frontend, backend, ZMQ_NULLPTR, ZMQ_NULLPTR);
+        zmq::proxy_steerable(frontend, backend, nullptr, nullptr);
     }
     catch (const zmq::error_t& e) {
         if (e.num() != ETERM) {  // Ignore normal termination
@@ -74,3 +74,10 @@ void MainSystem::start_proxy() {
 }
 
 void MainSystem::publish() {}
+
+void MainSystem::start_test() {
+    for (auto& [id, system] : systems_) {
+        system->init();
+        system->start();
+    }
+}

@@ -4,5 +4,6 @@ int main() {
     MainSystem mainSystem;
     mainSystem.init();
     mainSystem.start();
+    mainSystem.start_test();
     return 0;
 }

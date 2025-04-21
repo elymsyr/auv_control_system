@@ -45,6 +45,7 @@ public:
     ~MainSystem();
     void init_() override;
     bool proxy_running_ = true;
+    void start_test();
 
 private:
     void start_proxy();
