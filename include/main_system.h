@@ -27,8 +27,8 @@ enum class Operation {
 };
 
 class MainSystem : public Subsystem {
-    Subscriber<CommandTopic> command_sub_;
-    Subscriber<StateTopic> system_sub_;
+    SubscriberMain command_sub_;
+    bool is_new_ = false;
     
     std::thread proxy_thread;
     zmq::context_t proxy_ctx;
@@ -48,6 +48,7 @@ public:
     void start_test();
 
 private:
+    void parse_command(int system, int operation); 
     void start_proxy();
 
 protected:

@@ -6,7 +6,6 @@ ControlSystem::ControlSystem(std::string name, int runtime, unsigned int system_
 void ControlSystem::init() {
     motion_sub_.connect("tcp://localhost:5563");
     signal_sub_.connect("tcp://localhost:5562");
-    std::cout << name << " initialized\n";
 }
 
 void ControlSystem::function() {

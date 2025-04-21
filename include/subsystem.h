@@ -22,7 +22,7 @@ public:
     Subsystem(const std::string& name, int runtime, unsigned int system_code)
         :name(name),
         runtime(std::chrono::milliseconds(runtime)),
-        system_code(system_code) {}
+        system_code(system_code) {worker = std::thread([this]{ this->workerLoop(); });}
     ~Subsystem() {
         {
         std::lock_guard lk(mtx);
@@ -37,6 +37,7 @@ public:
     virtual void init() {
         _init();
         init_();
+        notify(0, 0);
     }
 
     virtual void init_() {};
@@ -44,7 +45,6 @@ public:
     virtual void _init() {
         try {
             state_pub_.connect("tcp://localhost:5555");
-            worker = std::thread([this]{ this->workerLoop(); });
         }
         catch (const std::exception& e) {
             std::cerr << "System "<< system_code << ": Failed to bind state publisher: " << e.what() << "\n";
@@ -58,6 +58,7 @@ public:
           run_requested = true;
         }
         cv_run.notify_one();
+        notify(1, 0);
     }
     virtual void stop() {
         {
@@ -65,6 +66,7 @@ public:
           run_requested = false;
         }
         cv_run.notify_one();
+        notify(2, 0);
     }
     virtual void halt() {
         {
@@ -73,6 +75,7 @@ public:
           shutdown_requested = true;
         }
         cv_halt.notify_one();
+        notify(3, 0);
     }
 
 private:
@@ -85,7 +88,6 @@ private:
     }
 
     void workerLoop() {
-        std::cout << name << " worker called!\n";
         std::unique_lock lk(mtx);
         while (!shutdown_requested) {
             cv_run.wait(lk, [&]{ return run_requested || shutdown_requested; });
@@ -93,7 +95,6 @@ private:
             if (shutdown_requested) break;
     
             while (run_requested) {
-                std::cout << name << " worker running!\n";
                 lk.unlock();
                 
                 // Main work cycle

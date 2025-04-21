@@ -9,7 +9,6 @@ MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_
 
 void MissionSystem::init() {
     env_sub_.connect("tcp://localhost:5560");
-    std::cout << name << " initialized\n";
 }
 
 void MissionSystem::function() {

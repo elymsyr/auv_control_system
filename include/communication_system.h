@@ -139,4 +139,73 @@ public:
     }
 };
 
+class SubscriberMain {
+protected:
+    zmq::socket_t socket_;
+    static constexpr const char* TOPIC = CommandTopic::TOPIC;
+
+private:
+    CommandTopic& data_;
+    bool& is_new_;
+    std::mutex& data_mutex_;
+    std::thread worker_thread_;
+    std::atomic<bool> running_{false};
+
+    void receiver_loop() {
+        while (running_) {
+            zmq::message_t topic, content;
+            try {
+                if (socket_.recv(topic) && 
+                    std::string_view(static_cast<char*>(topic.data()), topic.size()) == TOPIC) {
+                    if (socket_.recv(content)) {
+                        CommandTopic new_data = Deserialize<CommandTopic>(content);
+                        {
+                            std::lock_guard<std::mutex> lock(data_mutex_);
+                            data_.set(new_data);
+                            is_new_ = true;
+                            std::cout << "Received command - System: " 
+                                      << new_data.system << " Command: "
+                                      << static_cast<int>(new_data.command) << "\n";
+                        }
+                    }
+                }
+            } catch (const zmq::error_t& e) {
+                if (e.num() != ETERM) {
+                    std::cerr << "Receiver error: " << e.what() << "\n";
+                }
+            }
+        }
+    }
+
+public:
+    // Constructor taking reference to external data and its mutex
+    SubscriberMain(CommandTopic& data, std::mutex& mutex, bool& is_new_) 
+        : data_(data), data_mutex_(mutex), is_new_(is_new_), socket_(ZeroMQContext::get(), ZMQ_SUB) 
+    {
+        socket_.set(zmq::sockopt::linger, 0);
+        socket_.set(zmq::sockopt::rcvtimeo, 100);
+    }
+
+    void connect(const std::string& endpoint) {
+        socket_.connect(endpoint);
+        socket_.set(zmq::sockopt::subscribe, TOPIC);
+        running_ = true;
+        worker_thread_ = std::thread(&SubscriberMain::receiver_loop, this);
+    }
+
+    // Get current data with thread-safe access
+    CommandTopic get_data() const {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        return data_;
+    }
+
+    ~SubscriberMain() {
+        running_ = false;
+        if (worker_thread_.joinable()) {
+            worker_thread_.join();
+        }
+        socket_.close();
+    }
+};
+
 #endif // COMMUNICATION_H

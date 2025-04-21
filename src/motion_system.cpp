@@ -9,7 +9,6 @@ MotionSystem::MotionSystem(std::string name, int runtime, unsigned int system_co
 void MotionSystem::init() {
     mission_sub_.connect("tcp://localhost:5561");
     env_sub_.connect("tcp://localhost:5560");
-    std::cout << name << " initialized\n";
 }
 
 void MotionSystem::function() {
@@ -17,7 +16,7 @@ void MotionSystem::function() {
     std::array<double, 6> propeller = {static_cast<double>(rand() % 10), static_cast<double>(rand() % 10), static_cast<double>(rand() % 10), static_cast<double>(rand() % 10), static_cast<double>(rand() % 8), static_cast<double>(rand() % 8)};
     MotionTopic test;
     test.set(propeller);
-    motion_state.set();
+    motion_state.set(test);
 }
 
 void MotionSystem::publish() {

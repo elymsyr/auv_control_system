@@ -1,8 +1,9 @@
 import time
+import struct
 
 class StateTopic:
+    TOPIC = "State"
     def __init__(self, system=0, process=0, message=0):
-
         self._system = {
             0: "Main System",           # -> _subsystem_process
             1: "Environment System",    # -> _subsystem_process
@@ -88,10 +89,9 @@ class StateTopic:
             "timestamp": self.timestamp,
         }
 
-
 class CommandTopic:
+    TOPIC = "Command"
     def __init__(self, system=0, command=0):
-
         self._system = {
             0: "Main System",           # -> _subsystem_command
             1: "Environment System",    # -> _subsystem_command
@@ -142,5 +142,70 @@ class CommandTopic:
         return {
             "system": self.system,
             "command": self.command,
+            "timestamp": self.timestamp,
+        }
+    
+    def serialize(self) -> bytes:
+        """Pack data into binary format:
+        - system: 1 byte (unsigned char)
+        - command: 1 byte (unsigned char)
+        - timestamp: 8 bytes (unsigned long long)
+        """
+        return struct.pack('!B B Q', 
+                          self.system, 
+                          self.command, 
+                          self.timestamp)
+
+class EnvironmentTopic:
+    TOPIC = "Environment"
+    def __init__(self, eta: list[float], nu: list[float], nu_dot: list[float]):        
+        self.eta = eta
+        self.nu = nu
+        self.nu_dot = nu_dot
+        self.timestamp = int(time.time())  # Current timestamp
+
+    def __repr__(self):
+        return (f"EnvironmentTopic(eta={self.eta}, nu={self.nu}, nu_dot={self.nu_dot}, timestamp={self.timestamp})")
+
+    def __prs__(self):
+        return {
+            "eta": self.eta,
+            "nu": self.nu,
+            "nu_dot": self.nu_dot,
+            "timestamp": self.timestamp,
+        }
+
+    def __msg__(self):
+        return {
+            "eta": self.eta,
+            "nu": self.nu,
+            "nu_dot": self.nu_dot,
+            "timestamp": self.timestamp,
+        }
+
+class MissionTopic:
+    TOPIC = "Mission"
+    def __init__(self, eta_des: list[float], nu_des: list[float], nu_dot_des: list[float]):
+        self.eta_des = eta_des
+        self.nu_des = nu_des
+        self.nu_dot_des = nu_dot_des
+        self.timestamp = int(time.time())  # Current timestamp
+
+    def __repr__(self):
+        return (f"MissionTopic:(eta_des={self.eta_des}, nu_des={self.nu_des}, nu_dot_des={self.nu_dot_des}, timestamp={self.timestamp})")
+
+    def __prs__(self):
+        return {
+            "eta_des": self.eta_des,
+            "nu_des": self.nu_des,
+            "nu_dot_des": self.nu_dot_des,
+            "timestamp": self.timestamp,
+        }
+
+    def __msg__(self):
+        return {
+            "eta_des": self.eta_des,
+            "nu_des": self.nu_des,
+            "nu_dot_des": self.nu_dot_des,
             "timestamp": self.timestamp,
         }

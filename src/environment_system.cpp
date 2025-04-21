@@ -7,7 +7,6 @@ EnvironmentSystem::EnvironmentSystem(std::string name, int runtime, unsigned int
 }
 
 void EnvironmentSystem::init() {
-    std::cout << name << " initialized\n";
 }
 
 void EnvironmentSystem::function() {

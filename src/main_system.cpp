@@ -1,7 +1,7 @@
 #include "main_system.h"
 
 MainSystem::MainSystem(std::string name, int runtime, unsigned int system_code, std::unordered_map<SystemID, int> system_configs)
-    : command_sub_(command_received, command_mtx), system_sub_(system_state, system_mtx), Subsystem(name, runtime, system_code), system_configs_(std::move(system_configs))
+    : command_sub_(command_received, command_mtx, is_new_), Subsystem(name, runtime, system_code), system_configs_(std::move(system_configs))
 {
     proxy_thread = std::thread([this] { start_proxy(); });
     int retries = 0;
@@ -46,12 +46,54 @@ MainSystem::~MainSystem() {
 }
 
 void MainSystem::init_() {
-    system_sub_.connect("tcp://localhost:5555");
     command_sub_.connect("tcp://localhost:8889");
-    std::cout << name << " initialized\n";
 }
 
-void MainSystem::function() {}
+void MainSystem::function() {
+    std::cout << "Current command: system " << command_received.system << ", operation " << command_received.command << "\n";
+    if (is_new_) {
+        int system;
+        int operation;
+        {
+            std::shared_lock lock(topic_read_mutex);
+            system = command_received.system;
+            operation = command_received.command;
+            std::cout << "Received command: system " << system << ", operation " << operation << "\n";
+        }
+        parse_command(system, operation);
+        is_new_ = false;
+    }
+}
+
+void MainSystem::parse_command(int system, int operation) {
+    std::cout << "Parsing command: system " << system << ", operation " << operation << "\n";
+    std::unique_lock lock(system_mtx);
+    if (system == 6) {
+        std::cout << "Received a mission command\n";
+        return;
+    }
+    auto it = systems_.find(static_cast<SystemID>(system));
+    if (it != systems_.end()) {
+        switch (static_cast<Operation>(operation)) {
+            case Operation::INIT:
+                it->second->init();
+                break;
+            case Operation::START:
+                it->second->start();
+                break;
+            case Operation::STOP:
+                it->second->stop();
+                break;
+            case Operation::HALT:
+                it->second->halt();
+                break;
+            default:
+                std::cerr << "Unknown operation\n";
+        }
+    } else {
+        std::cerr << "Unknown system ID\n";
+    }
+}
 
 void MainSystem::start_proxy() {
     zmq::context_t proxy_ctx(1);
@@ -63,10 +105,10 @@ void MainSystem::start_proxy() {
         backend.bind("tcp://*:8888");
         
         proxy_running_ = true;
-        zmq::proxy_steerable(frontend, backend, nullptr, nullptr);
+        zmq::proxy(frontend, backend);  // Use updated proxy function
     }
     catch (const zmq::error_t& e) {
-        if (e.num() != ETERM) {  // Ignore normal termination
+        if (e.num() != ETERM) {
             std::cerr << "Proxy error: " << e.what() << "\n";
         }
     }
