@@ -8,6 +8,7 @@
 #include <chrono>
 #include <zmq_addon.hpp>
 #include <any>
+#include <mutex>
 
 class ControlSystem : public Subsystem {
     Subscriber<MotionTopic> motion_sub_;
@@ -21,9 +22,9 @@ public:
     void init() override;
 
 protected:
-    void refresh_received() override;
     void function() override;
     void publish() override;
+    std::mutex motion_mtx, signal_mtx;
 };
 
 #endif // CONTROL_H

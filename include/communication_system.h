@@ -34,10 +34,9 @@ public:
     }
 
     // For direct publishers
-    void bind(const std::string& endpoint, const std::string& topic = T::DEFAULT_TOPIC) {
+    void bind(const std::string& endpoint) {
         if(is_bound) throw std::runtime_error("Socket already bound");
         socket_.bind(endpoint);
-        TOPIC = topic;
         is_bound = true;
     }
 
@@ -48,11 +47,9 @@ public:
     }
 
     void publish(const T& data) {
-        if(TOPIC.empty()) throw std::runtime_error("No topic specified");
-
-        zmq::message_t topic_msg(TOPIC.data(), TOPIC.size());
+        zmq::message_t topic_msg(TOPIC, strlen(TOPIC)); // Use C-string functions
         zmq::message_t content_msg;
-        Serialize<T>(content_msg, data);
+        Serialize(content_msg, data);
         
         try {
             socket_.send(topic_msg, zmq::send_flags::sndmore);

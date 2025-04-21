@@ -22,17 +22,7 @@ public:
     Subsystem(const std::string& name, int runtime, unsigned int system_code)
         :name(name),
         runtime(std::chrono::milliseconds(runtime)),
-        system_code(system_code)
-    {
-        try {
-            state_pub_.connect("tcp://*:5555");
-            worker = std::thread([this]{ this->workerLoop(); });
-        }
-        catch (const std::exception& e) {
-            std::cerr << "System "<< system_code << ": Failed to bind state publisher: " << e.what() << "\n";
-            throw;
-        }
-    }
+        system_code(system_code) {}
     ~Subsystem() {
         {
         std::lock_guard lk(mtx);
@@ -44,7 +34,23 @@ public:
         state_pub_.close();
     }
 
-    virtual void init() = 0;
+    virtual void init() {
+        init_();
+    }
+
+    virtual void init_() {};
+
+    virtual void _init() {
+        try {
+            state_pub_.connect("tcp://*:5555");
+            worker = std::thread([this]{ this->workerLoop(); });
+        }
+        catch (const std::exception& e) {
+            std::cerr << "System "<< system_code << ": Failed to bind state publisher: " << e.what() << "\n";
+            throw;
+        }
+    }
+
     virtual void start() {
         {
           std::lock_guard lk(mtx);
@@ -71,7 +77,6 @@ public:
 private:
     virtual void function() = 0;
     virtual void publish() = 0;
-    virtual void refresh_received() = 0;
 
     virtual void notify(unsigned int process, uint8_t message) {
         system_state.set(system_code, process, message);
@@ -87,7 +92,6 @@ private:
             while (run_requested) {
                 lk.unlock();
                 auto start = std::chrono::high_resolution_clock::now();
-                refresh_received();
                 function();
                 publish();
                 std::this_thread::sleep_until(start + runtime);

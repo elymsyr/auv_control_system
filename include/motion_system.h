@@ -8,6 +8,7 @@
 #include <chrono>
 #include <zmq_addon.hpp>
 #include <any>
+#include <mutex>
 
 class MotionSystem : public Subsystem {
     Publisher<MotionTopic> motion_pub_;
@@ -23,9 +24,9 @@ public:
     void init() override;
 
 protected:
-    void refresh_received() override;
     void function() override;
     void publish() override;
+    std::mutex mission_mtx, env_mtx;
 };
 
 #endif // MOTION_H

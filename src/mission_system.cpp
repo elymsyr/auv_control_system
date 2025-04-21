@@ -1,7 +1,7 @@
 #include "mission_system.h"
 
 MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_code)
-    : Subsystem(name, runtime, system_code) 
+    : env_sub_(env_state, env_mtx), Subsystem(name, runtime, system_code) 
 {
     mission_pub_.bind("tcp://*:5561");
     signal_pub_.bind("tcp://*:5562");
@@ -10,16 +10,6 @@ MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_
 void MissionSystem::init() {
     env_sub_.connect("tcp://localhost:5560");
     std::cout << name << " initialized\n";
-}
-
-void MissionSystem::refresh_received() {
-    std::lock_guard lk(mtx);
-    try {
-        env_state.set(env_sub_.receive());
-    }
-    catch (const std::exception& e) {
-        std::cerr << "Failed to set env state\n";
-    }
 }
 
 void MissionSystem::function() {

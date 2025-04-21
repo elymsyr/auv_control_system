@@ -8,6 +8,7 @@
 #include <chrono>
 #include <zmq_addon.hpp>
 #include <any>
+#include <mutex>
 
 class MissionSystem : public Subsystem {
     Publisher<MissionTopic> mission_pub_;
@@ -23,9 +24,9 @@ public:
     void init() override;
 
 protected:
-    void refresh_received() override;
     void function() override;
     void publish() override;
+    std::mutex env_mtx;
 };
 
 #endif // MISSION_H

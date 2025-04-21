@@ -19,7 +19,6 @@ public:
     void init() override;
 
 protected:
-    void refresh_received() override;
     void function() override;
     void publish() override;
 };

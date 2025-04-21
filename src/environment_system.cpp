@@ -10,8 +10,6 @@ void EnvironmentSystem::init() {
     std::cout << name << " initialized\n";
 }
 
-void EnvironmentSystem::refresh_received() {}
-
 void EnvironmentSystem::function() {
     // notify if any error occured
     env_state.set();

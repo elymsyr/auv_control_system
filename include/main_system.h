@@ -10,6 +10,7 @@
 #include "control_system.h"
 #include <iostream>
 #include <memory>
+#include <mutex>
 
 enum class SystemID {
     ENVIRONMENT,
@@ -42,15 +43,16 @@ class MainSystem : public Subsystem {
 public:
     MainSystem(std::string name = "Main", int runtime = 200, unsigned int system_code = 0, std::unordered_map<SystemID, int> system_configs = { {SystemID::MISSION, 100}, {SystemID::CONTROL, 100}, {SystemID::MOTION, 100}, {SystemID::ENVIRONMENT, 50} });
     ~MainSystem();
-    void init() override;
+    void init_() override;
+    bool proxy_running_ = true;
 
 private:
     void start_proxy();
 
 protected:
     void function() override;
-    void refresh_received() override;
     void publish() override;
+    std::mutex command_mtx, system_mtx;
 };
 
 #endif // MAIN_H
