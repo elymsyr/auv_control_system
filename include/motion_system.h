@@ -20,14 +20,11 @@ public:
     EnvironmentTopic env_state;
 
     MotionSystem(std::string name = "Motion", int runtime = 200, unsigned int system_code = 2);
-
     void init() override;
 
 protected:
     void refresh_received() override;
-
     void function() override;
-
     void publish() override;
 };
 

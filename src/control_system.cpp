@@ -1,6 +1,6 @@
 #include "control_system.h"
 
-ControlSystem::ControlSystem(std::string name = "Control", int runtime = 100, unsigned int system_code = 3) 
+ControlSystem::ControlSystem(std::string name, int runtime, unsigned int system_code) 
     : Subsystem(name, runtime, system_code) {}
 
 void ControlSystem::init() {

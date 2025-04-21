@@ -1,6 +1,6 @@
 #include "motion_system.h"
 
-MotionSystem::MotionSystem(std::string name = "Motion", int runtime = 200, unsigned int system_code = 2) 
+MotionSystem::MotionSystem(std::string name, int runtime, unsigned int system_code) 
     : Subsystem(name, runtime, system_code) 
 {
     motion_pub_.bind("tcp://*:5563");

@@ -20,14 +20,11 @@ public:
     EnvironmentTopic env_state;
 
     MissionSystem(std::string name = "Mission", int runtime = 100, unsigned int system_code = 1);
-
     void init() override;
 
 protected:
     void refresh_received() override;
-
     void function() override;
-
     void publish() override;
 };
 

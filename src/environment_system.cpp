@@ -1,6 +1,6 @@
 #include "environment_system.h"
 
-EnvironmentSystem::EnvironmentSystem(std::string name = "Environment", int runtime = 50, unsigned int system_code = 0)
+EnvironmentSystem::EnvironmentSystem(std::string name, int runtime, unsigned int system_code)
     : Subsystem(name, runtime, system_code)
 {
     env_pub_.bind("tcp://*:5560");

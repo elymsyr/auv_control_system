@@ -16,16 +16,11 @@ public:
     EnvironmentTopic env_state;
 
     EnvironmentSystem(std::string name = "Environment", int runtime = 50, unsigned int system_code = 0);
-
-    void init() override {
-        std::cout << name << " initialized\n";
-    }
+    void init() override;
 
 protected:
     void refresh_received() override;
-
     void function() override;
-
     void publish() override;
 };
 

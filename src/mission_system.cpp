@@ -1,6 +1,6 @@
-#include "mission_system.h">
+#include "mission_system.h"
 
-MissionSystem::MissionSystem(std::string name = "Mission", int runtime = 100, unsigned int system_code = 1)
+MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_code)
     : Subsystem(name, runtime, system_code) 
 {
     mission_pub_.bind("tcp://*:5561");

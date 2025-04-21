@@ -1,12 +1,15 @@
 #ifndef SUBSYSTEM_H
 #define SUBSYSTEM_H
 
-# include <thread>
-# include <mutex>
-# include <condition_variable>
-# include <chrono>
-# include <shared_mutex>
-# include "topics.hpp"
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
+#include <shared_mutex>
+#include <iostream>
+#include "topics.hpp"
+#include "communication_system.h"
+
 
 class Subsystem {
 public:
@@ -21,8 +24,14 @@ public:
         runtime(std::chrono::milliseconds(runtime)),
         system_code(system_code)
     {
-        bind_system_pub();
-        worker = std::thread([this]{ this->workerLoop(); });
+        try {
+            state_pub_.connect("tcp://*:5555");
+            worker = std::thread([this]{ this->workerLoop(); });
+        }
+        catch (const std::exception& e) {
+            std::cerr << "System "<< system_code << ": Failed to bind state publisher: " << e.what() << "\n";
+            throw;
+        }
     }
     ~Subsystem() {
         {
@@ -32,11 +41,9 @@ public:
         }
         if (worker.joinable())
             worker.join();
+        state_pub_.close();
     }
 
-    virtual void bind_system_pub() {
-        state_pub_.bind("tcp://*:" + std::to_string(5550 + system_code));
-    }
     virtual void init() = 0;
     virtual void start() {
         {
@@ -66,8 +73,8 @@ private:
     virtual void publish() = 0;
     virtual void refresh_received() = 0;
 
-    virtual void notify(unsigned int system, unsigned int process, uint8_t message) {
-        system_state.set(system, process, message);
+    virtual void notify(unsigned int process, uint8_t message) {
+        system_state.set(system_code, process, message);
         state_pub_.publish(system_state);
     }
 

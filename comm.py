@@ -17,8 +17,11 @@ class UnderwaterVehicleGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Underwater Vehicle Control")
-        self.root.geometry("800x600")
-        self.connection_active = False
+        self.root.geometry("1000x800")
+        self.command_connection_active = False
+        self.mission_connection_active = False
+        self.environment_connection_active = False
+        self.state_connection_active = False
         self.context = zmq.Context()
         
         # ZeroMQ setup
@@ -33,12 +36,13 @@ class UnderwaterVehicleGUI:
     def _init_zmq(self):
         """Initialize ZeroMQ sockets"""
         self.command_socket = self.context.socket(zmq.PUB)
-        self.data_socket = self.context.socket(zmq.SUB)
-        self.data_socket.setsockopt_string(zmq.SUBSCRIBE, "")
+        self.state_socket = self.context.socket(zmq.SUB)  # Renamed from data_socket
+        self.state_socket.setsockopt_string(zmq.SUBSCRIBE, "")
         
         try:
             self.command_socket.bind(f"tcp://*:{self.command_port}")
-            self.data_socket.connect(f"tcp://localhost:{self.data_port}")
+            # Connect to the common state port used by all systems
+            self.state_socket.connect("tcp://localhost:5555")  # Changed from data_port
         except zmq.ZMQError as e:
             self.show_error(f"ZeroMQ init failed: {str(e)}")
 
@@ -326,16 +330,6 @@ class UnderwaterVehicleGUI:
         elif msg_type == 'system_log':
             self._update_system_log(payload)
 
-    def _update_environment(self, data):
-        try:
-            text = "Environment Status:\n"
-            text += f"Position: {data.get('position', [0]*3)}\n"
-            text += f"Orientation: {data.get('orientation', [0]*3)}\n"
-            text += f"Temperature: {data.get('temperature', 0)}°C\n"
-            self._append_to_display(self.env_text, text)
-        except Exception as e:
-            self.log_message(f"Env update error: {str(e)}", 'error')
-
     def _update_system_state(self, states):
         try:
             for system, status in states.items():
@@ -347,6 +341,16 @@ class UnderwaterVehicleGUI:
             self.update_system_states_gui()
         except Exception as e:
             self.log_message(f"State update error: {str(e)}", 'error')
+
+    def _update_environment(self, data):
+        try:
+            text = "Environment Status:\n"
+            text += f"Position: {data.get('position', [0]*3)}\n"
+            text += f"Orientation: {data.get('orientation', [0]*3)}\n"
+            text += f"Temperature: {data.get('temperature', 0)}°C\n"
+            self._append_to_display(self.env_text, text)
+        except Exception as e:
+            self.log_message(f"Env update error: {str(e)}", 'error')
 
     def _update_system_log(self, log):
         try:

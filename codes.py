@@ -14,13 +14,13 @@ class StateTopic:
         }
 
         self._subsystem_process = {
-            0: "Thread",                # -> _subsystem_message
-            1: "Init",                  # -> _subsystem_message
-            2: "Start",                 # -> _subsystem_message
-            3: "Stop",                  # -> _subsystem_message
-            4: "Halt",                  # -> _subsystem_message
+            0: "Init",                  # -> _subsystem_message
+            1: "Start",                 # -> _subsystem_message
+            2: "Stop",                  # -> _subsystem_message
+            3: "Halt",                  # -> _subsystem_message
+            4: "Thread",                # -> _subsystem_message
             5: "System",                # -> _subsystem_message
-            5: "Other",                 # -> _subsystem_message
+            6: "Other",                 # -> _subsystem_message
         }
 
         self._mission_process = {
@@ -35,10 +35,18 @@ class StateTopic:
         }
 
         self._subsystem_message = {
-            0: "Initialized",
-            1: "Live",
-            2: "Stopped",
-            3: "Halted",
+            # General messages (process-independent)
+            0: "Operation successful",
+            
+            # Init process errors
+            1: "Sensor initialization failed",
+            2: "Calibration timeout",
+            
+            # Start process errors
+            10: "Motor communication failure",
+            11: "Power supply unstable",
+            
+            # ... other error codes
         }
 
         self._mission_message = {

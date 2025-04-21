@@ -1,25 +1,23 @@
 #include "main_system.h"
 
-System::System(Subsystem& sys, Subscriber<StateTopic>& sub, unsigned int ord)
-    : system(sys), subscriber(sub), order(ord) {}
-
-
-MainSystem::MainSystem(std::string name = "Main", int runtime = 200, unsigned int system_code = 0, std::unordered_map<SystemID, int> system_configs = { {SystemID::MISSION, 100}, {SystemID::CONTROL, 100}, {SystemID::MOTION, 100}, {SystemID::ENVIRONMENT, 50} })
+MainSystem::MainSystem(std::string name, int runtime, unsigned int system_code, std::unordered_map<SystemID, int> system_configs)
     : Subsystem(name, runtime, system_code), system_configs_(std::move(system_configs))
 {
+    proxy_thread = std::thread([this] { start_proxy(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     for (const auto& [id, runtime] : system_configs_) {
         switch (id) {
             case SystemID::ENVIRONMENT:
-                systems_[id] = std::make_unique<System>( std::make_unique<EnvironmentSystem>("Environment", runtime, 1), Subscriber<StateTopic>(), 1 );
+                systems_[id] = std::make_unique<EnvironmentSystem>("Environment", runtime, 1);
                 break;
             case SystemID::MISSION:
-                systems_[id] = std::make_unique<System>( std::make_unique<MissionSystem>("Mission", runtime, 2), Subscriber<StateTopic>(), 2 );
+                systems_[id] = std::make_unique<MissionSystem>("Mission", runtime, 2);
                 break;
             case SystemID::MOTION:
-                systems_[id] = std::make_unique<System>( std::make_unique<MotionSystem>("Motion", runtime, 3), Subscriber<StateTopic>(), 3 );
+                systems_[id] = std::make_unique<MotionSystem>("Motion", runtime, 3);
                 break;
             case SystemID::CONTROL:
-                systems_[id] = std::make_unique<System>( std::make_unique<ControlSystem>("Control", runtime, 4), Subscriber<StateTopic>(), 4 );
+                systems_[id] = std::make_unique<ControlSystem>("Control", runtime, 4);
                 break;
             default:
                 throw std::runtime_error("Unknown system ID");
@@ -27,15 +25,32 @@ MainSystem::MainSystem(std::string name = "Main", int runtime = 200, unsigned in
     }
 }
 
+MainSystem::~MainSystem() {
+    {
+        std::lock_guard lk(mtx);
+        shutdown_requested = true;
+        cv_run.notify_one();
+    }
+    if (worker.joinable())
+        worker.join();
+    for (auto& [id, system] : systems_) {
+        system->stop();
+        system->halt();
+    }
+    proxy_ctx.close();
+    if (proxy_thread.joinable())
+        proxy_thread.join();
+}
+
 void MainSystem::init() {
-    mission_sub_.connect("tcp://localhost:5561");
-    env_sub_.connect("tcp://localhost:5560");
+    system_sub_.connect("tcp://localhost:5555");
     command_sub_.connect("tcp://localhost:8889");
-    sub_system_connect();
     std::cout << name << " initialized\n";
 }
 
-void MainSystem::function() {
+void MainSystem::function() {}
+
+void MainSystem::refresh_received() {
     {
         std::lock_guard lk(mtx);
         try{
@@ -48,67 +63,21 @@ void MainSystem::function() {
         catch (const std::exception& e) {
             std::cerr << "Failed to receive command\n";
         }
-        try{
-            mission_state.set(mission_sub_.receive());
-        }
-        catch (const std::exception& e) {
-            std::cerr << "Failed to receive mission state\n";
-        }
-        try{
-            env_state.set(env_sub_.receive());
-        }
-        catch (const std::exception& e) {
-            std::cerr << "Failed to receive environment state\n";
-        }
+    }
+}
+
+void MainSystem::start_proxy() {
+    zmq::socket_t frontend(proxy_ctx, ZMQ_XSUB);
+    zmq::socket_t backend(proxy_ctx, ZMQ_XPUB);
+    
+    try {
+        frontend.bind("tcp://*:5555");  // Subsystems connect here
+        backend.bind("tcp://*:8888");    // GUI connects here
+        zmq::proxy(frontend, backend);
+    }
+    catch (const zmq::error_t& e) {
+        std::cerr << "Proxy error: " << e.what() << "\n";
     }
 }
 
 void MainSystem::publish() {}
-
-
-void MainSystem::manage_systems(const std::vector<SystemID>& systems = {}, Operation operation) {
-    auto performOperation = [&](Subsystem* system, Operation op) {
-        if (op == Operation::INIT) {
-            system->init();
-        } else if (op == Operation::START) {
-            system->start();
-        } else if (op == Operation::STOP) {
-            system->stop();
-        } else if (op == Operation::HALT) {
-            system->halt();
-        } else {
-            throw std::invalid_argument("Unknown operation");
-        }
-    };
-
-    if (systems.empty()) {
-        for (const auto& [id, system] : systems_) {
-            performOperation(&system->system, operation);
-        }
-    } else {
-        for (const auto& id : systems) {
-            if (systems_.find(id) != systems_.end()) {
-                performOperation(&systems_[id]->system, operation);
-            } else {
-                std::cerr << "System ID not found: " << static_cast<int>(id) << "\n";
-            }
-        }
-    }
-}
-
-void MainSystem::sub_system_receive() {
-    std::shared_lock lock(topic_read_mutex);
-    for (const auto& [id, system] : systems_) {
-        system->subscriber.receive();
-    }
-}
-
-void MainSystem::sub_system_connect() {
-    for (const auto& [id, system] : systems_) {
-        system->subscriber.connect("tcp://localhost:" + std::to_string(5550 + system->order));
-    }
-}
-
-void MainSystem::bind_system_pub() {
-    state_pub_.bind("tcp://*:8888");
-}
