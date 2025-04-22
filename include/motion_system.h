@@ -22,6 +22,7 @@ public:
 
     MotionSystem(std::string name = "Motion", int runtime = 200, unsigned int system_code = 2);
     void init() override;
+    void halt() override;
 
 protected:
     void function() override;

@@ -20,6 +20,7 @@ public:
 
     ControlSystem(std::string name = "Control", int runtime = 100, unsigned int system_code = 3);
     void init() override;
+    void halt() override;
 
 protected:
     void function() override;

@@ -22,3 +22,9 @@ void MissionSystem::publish() {
     mission_pub_.publish(mission_state);
     signal_pub_.publish(signal_state);
 }
+
+void MissionSystem::halt() {
+    mission_pub_.close();
+    signal_pub_.close();
+    env_sub_.close();
+}

@@ -23,3 +23,9 @@ void MotionSystem::publish() {
     std::shared_lock lock(topic_read_mutex);
     motion_pub_.publish(motion_state);
 }
+
+void MotionSystem::halt() {
+    motion_pub_.close();
+    mission_sub_.close();
+    env_sub_.close();
+}

@@ -131,6 +131,10 @@ public:
     }
 
     ~Subscriber() {
+        close();
+    }
+
+    void close() {
         running_ = false;
         if (worker_thread_.joinable()) {
             worker_thread_.join();
@@ -163,9 +167,6 @@ private:
                             std::lock_guard<std::mutex> lock(data_mutex_);
                             data_.set(new_data);
                             is_new_ = true;
-                            std::cout << "Received command - System: " 
-                                      << new_data.system << " Command: "
-                                      << static_cast<int>(new_data.command) << "\n";
                         }
                     }
                 }
@@ -200,6 +201,10 @@ public:
     }
 
     ~SubscriberMain() {
+        close();
+    }
+
+    void close() {
         running_ = false;
         if (worker_thread_.joinable()) {
             worker_thread_.join();

@@ -25,12 +25,13 @@ public:
         system_code(system_code) {worker = std::thread([this]{ this->workerLoop(); });}
     ~Subsystem() {
         {
-        std::lock_guard lk(mtx);
-        shutdown_requested = true;
-        cv_run.notify_one();
+            std::lock_guard lk(mtx);
+            shutdown_requested = true;
+            cv_run.notify_one();
         }
         if (worker.joinable())
             worker.join();
+        notify(3, 0);
         state_pub_.close();
     }
 
@@ -38,6 +39,7 @@ public:
         _init();
         init_();
         notify(0, 0);
+        std::cout << "init: " << name << "\n";
     }
 
     virtual void init_() {};
@@ -53,6 +55,7 @@ public:
     }
 
     virtual void start() {
+        std::cout << "start: " << name << "\n";
         {
           std::lock_guard lk(mtx);
           run_requested = true;
@@ -68,24 +71,22 @@ public:
         cv_run.notify_one();
         notify(2, 0);
     }
-    virtual void halt() {
+    virtual void halt() = 0;
+
+    void notify(unsigned int process, uint8_t message) {
         {
-          std::lock_guard lk(mtx);
-          run_requested = false;
-          shutdown_requested = true;
+            std::lock_guard<std::mutex> lock(system_state_mtx);
+            system_state.set(system_code, process, message);
         }
-        cv_halt.notify_one();
-        notify(3, 0);
+        {
+            std::shared_lock<std::shared_mutex> lock(topic_read_mutex);
+            state_pub_.publish(system_state);
+        }
     }
 
 private:
     virtual void function() = 0;
     virtual void publish() = 0;
-
-    virtual void notify(unsigned int process, uint8_t message) {
-        system_state.set(system_code, process, message);
-        state_pub_.publish(system_state);
-    }
 
     void workerLoop() {
         std::unique_lock lk(mtx);
@@ -113,7 +114,7 @@ private:
 protected:
     mutable std::shared_mutex topic_read_mutex; // std::shared_lock lock(state_mutex); (Multiple readers allowed, prevents writes.)
     std::thread worker;
-    std::mutex  mtx;
+    std::mutex  mtx, system_state_mtx;
     std::condition_variable cv_run, cv_halt;
     bool run_requested = false, shutdown_requested = false;
 };

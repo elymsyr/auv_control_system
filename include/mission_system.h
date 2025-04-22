@@ -22,6 +22,7 @@ public:
 
     MissionSystem(std::string name = "Mission", int runtime = 100, unsigned int system_code = 1);
     void init() override;
+    void halt() override;
 
 protected:
     void function() override;

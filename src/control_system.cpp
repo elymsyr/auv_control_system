@@ -21,3 +21,8 @@ void ControlSystem::function() {
 }
 
 void ControlSystem::publish() {}
+
+void ControlSystem::halt() {
+    motion_sub_.close();
+    signal_sub_.close();
+}

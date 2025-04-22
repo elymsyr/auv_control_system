@@ -18,3 +18,7 @@ void EnvironmentSystem::publish() {
     std::shared_lock lock(topic_read_mutex);
     env_pub_.publish(env_state);
 }
+
+void EnvironmentSystem::halt() {
+    env_pub_.close();
+}

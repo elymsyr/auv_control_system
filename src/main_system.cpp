@@ -3,6 +3,7 @@
 MainSystem::MainSystem(std::string name, int runtime, unsigned int system_code, std::unordered_map<SystemID, int> system_configs)
     : command_sub_(command_received, command_mtx, is_new_), Subsystem(name, runtime, system_code), system_configs_(std::move(system_configs))
 {
+    command_received.set();
     proxy_thread = std::thread([this] { start_proxy(); });
     int retries = 0;
     while (!proxy_running_ && retries++ < 10) {
@@ -40,27 +41,26 @@ MainSystem::~MainSystem() {
         system->stop();
         system->halt();
     }
-    proxy_ctx.close();
+    proxy_ctx->close();
     if (proxy_thread.joinable())
         proxy_thread.join();
+    notify(3, 0);
+    state_pub_.close();
 }
 
 void MainSystem::init_() {
     command_sub_.connect("tcp://localhost:8889");
+    start();
 }
 
 void MainSystem::function() {
-    std::cout << "Current command: system " << command_received.system << ", operation " << command_received.command << "\n";
     if (is_new_) {
-        int system;
-        int operation;
+        CommandTopic cmd;
         {
-            std::shared_lock lock(topic_read_mutex);
-            system = command_received.system;
-            operation = command_received.command;
-            std::cout << "Received command: system " << system << ", operation " << operation << "\n";
+            std::shared_lock slock(topic_read_mutex);
+            cmd = command_received;
         }
-        parse_command(system, operation);
+        parse_command(cmd.system, cmd.command);
         is_new_ = false;
     }
 }
@@ -68,30 +68,58 @@ void MainSystem::function() {
 void MainSystem::parse_command(int system, int operation) {
     std::cout << "Parsing command: system " << system << ", operation " << operation << "\n";
     std::unique_lock lock(system_mtx);
-    if (system == 6) {
-        std::cout << "Received a mission command\n";
-        return;
-    }
-    auto it = systems_.find(static_cast<SystemID>(system));
-    if (it != systems_.end()) {
+    if (system == 0) {
         switch (static_cast<Operation>(operation)) {
             case Operation::INIT:
-                it->second->init();
+                for (auto& [id, system] : systems_) {
+                    system->init();
+                }
                 break;
             case Operation::START:
-                it->second->start();
+                for (auto& [id, system] : systems_) {
+                    system->start();
+                }
                 break;
             case Operation::STOP:
-                it->second->stop();
+                for (auto& [id, system] : systems_) {
+                    system->stop();
+                }
                 break;
             case Operation::HALT:
-                it->second->halt();
+                for (auto& [id, system] : systems_) {
+                    system->halt();
+                }
                 break;
             default:
                 std::cerr << "Unknown operation\n";
         }
-    } else {
-        std::cerr << "Unknown system ID\n";
+    }
+    else if (system == 6) {
+        std::cout << "Received a mission command\n";
+        return;
+    }
+    else {
+        auto it = systems_.find(static_cast<SystemID>(system));
+        if (it != systems_.end()) {
+            switch (static_cast<Operation>(operation)) {
+                case Operation::INIT:
+                    it->second->init();
+                    break;
+                case Operation::START:
+                    it->second->start();
+                    break;
+                case Operation::STOP:
+                    it->second->stop();
+                    break;
+                case Operation::HALT:
+                    it->second->halt();
+                    break;
+                default:
+                    std::cerr << "Unknown operation\n";
+            }
+        } else {
+            std::cerr << "Unknown system ID\n";
+        }
     }
 }
 
@@ -105,6 +133,7 @@ void MainSystem::start_proxy() {
         backend.bind("tcp://*:8888");
         
         proxy_running_ = true;
+        this->proxy_ctx = std::make_unique<zmq::context_t>(std::move(proxy_ctx));
         zmq::proxy(frontend, backend);  // Use updated proxy function
     }
     catch (const zmq::error_t& e) {
@@ -122,4 +151,9 @@ void MainSystem::start_test() {
         system->init();
         system->start();
     }
+}
+
+void MainSystem::halt() {
+    stop();
+    command_sub_.close();
 }
