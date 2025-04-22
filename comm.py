@@ -359,10 +359,11 @@ class UnderwaterVehicleGUI:
                 for socket in socks:
                     try:
                         topic = socket.recv_string()
-                        data = socket.recv_json()
+                        data = socket.recv()
                         print(f"Received message on topic: {topic}")
                         print(f"Raw data: {data}")
                         self.last_received[topic.lower()] = time.time()
+                        print(topic, data)
                         self.root.after(0, self._process_message, topic, data)
                     except zmq.ZMQError as e:
                         self.log_message(f"Receive error: {str(e)}", 'error')

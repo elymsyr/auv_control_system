@@ -54,6 +54,7 @@ void MainSystem::init_() {
 }
 
 void MainSystem::function() {
+    // std::unique_lock lock(command_mtx);
     if (is_new_) {
         CommandTopic cmd;
         {
