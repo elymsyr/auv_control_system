@@ -1,11 +1,74 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 import numpy as np
 import h5py
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+def visualize_results(targets_denorm, predictions_denorm):
+    # Create subplots for scatter plots
+    plt.figure(figsize=(18, 12))
+    
+    # Scatter plots of True vs Predicted values
+    for i in range(6):
+        plt.subplot(2, 3, i+1)
+        true = targets_denorm[:, i]
+        pred = predictions_denorm[:, i]
+        plt.scatter(true, pred, alpha=0.3, label='Samples')
+        plt.plot([min(true), max(true)], [min(true), max(true)], 'r--', label='Perfect Prediction')
+        plt.xlabel(f'True Value (Thruster {i+1})')
+        plt.ylabel(f'Predicted Value (Thruster {i+1})')
+        plt.title(f'Thruster {i+1} - True vs Predicted')
+        plt.legend()
+        plt.grid(True)
+        
+        # Add R² and MAE to plot
+        r2 = r2_score(true, pred)
+        mae = mean_absolute_error(true, pred)
+        plt.text(0.05, 0.9, f'R²: {r2:.2f}\nMAE: {mae:.2f}', 
+                transform=plt.gca().transAxes,
+                bbox=dict(facecolor='white', alpha=0.8))
+    
+    plt.tight_layout()
+    plt.savefig('true_vs_predicted_scatter.png')
+    plt.show()
+
+    # Create sample comparison plot (first 100 samples)
+    plt.figure(figsize=(18, 12))
+    sample_indices = np.arange(100)
+    
+    for i in range(6):
+        plt.subplot(2, 3, i+1)
+        plt.plot(sample_indices, targets_denorm[:100, i], 'b-', label='True')
+        plt.plot(sample_indices, predictions_denorm[:100, i], 'r--', label='Predicted')
+        plt.xlabel('Sample Index')
+        plt.ylabel('Value')
+        plt.title(f'Thruster {i+1} - First 100 Samples')
+        plt.legend()
+        plt.grid(True)
+    
+    plt.tight_layout()
+    plt.savefig('sample_comparison.png')
+    plt.show()
+
+    # Residuals distribution
+    plt.figure(figsize=(18, 12))
+    residuals = targets_denorm - predictions_denorm
+    
+    for i in range(6):
+        plt.subplot(2, 3, i+1)
+        plt.hist(residuals[:, i], bins=50, alpha=0.7)
+        plt.xlabel('Residual (True - Predicted)')
+        plt.ylabel('Frequency')
+        plt.title(f'Thruster {i+1} - Residual Distribution')
+        plt.grid(True)
+    
+    plt.tight_layout()
+    plt.savefig('residual_distribution.png')
+    plt.show()
 
 # Configuration for feature normalization
 class FeatureNormalizer:
@@ -43,7 +106,7 @@ Y_SCALE_FACTORS = [80.0,80.0,50.0,50.0,80.0,80.0]
 normalizer = FeatureNormalizer(X_SCALE_FACTORS, Y_SCALE_FACTORS)
 
 # Load and process data
-with h5py.File('mpc_data.h5', 'r') as hf:
+with h5py.File('data/mpc_data_1.h5', 'r') as hf:
     X = np.hstack((hf['x_current'][:], hf['x_desired'][:])).astype(np.float32)
     y = hf['u_opt'][:].astype(np.float32)
 
@@ -103,7 +166,7 @@ class FossenNet(nn.Module):
 config = {
     'batch_size': 128,
     'lr': 3e-4,
-    'epochs': 300,
+    'epochs': 5,
     'weight_decay': 1e-6,
     'patience': 15
 }
@@ -202,13 +265,13 @@ def evaluate_test_set():
             'R2': r2_score(targets_denorm[:, i], predictions_denorm[:, i])
         })
     
-    return metrics, thruster_metrics
+    return metrics, thruster_metrics, predictions_denorm, targets_denorm
 
 if __name__ == '__main__':
     train()
     
     # Evaluate on test set
-    metrics, thruster_metrics = evaluate_test_set()
+    metrics, thruster_metrics, preds, targets = evaluate_test_set()
     
     print("\nFinal Test Set Metrics:")
     print(f"MAE: {metrics['MAE']:.4f}")
@@ -221,3 +284,5 @@ if __name__ == '__main__':
         print(f"\nThruster {tm['Thruster']}:")
         print(f"MAE: {tm['MAE']:.4f}  MSE: {tm['MSE']:.4f}")
         print(f"RMSE: {tm['RMSE']:.4f}  R²: {tm['R2']:.4f}")
+        
+    visualize_results(targets, preds)
