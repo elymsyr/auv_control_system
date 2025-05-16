@@ -5,14 +5,11 @@ from torch.utils.data import Dataset, DataLoader, TensorDataset
 import numpy as np
 import h5py
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # Configuration for feature normalization
 class FeatureNormalizer:
     def __init__(self, x_scales, y_scales):
-        """
-        x_scales: List of maximum absolute values for each input feature
-        y_scales: List of maximum absolute values for each output feature
-        """
         self.x_scales = np.array(x_scales, dtype=np.float32)
         self.y_scales = np.array(y_scales, dtype=np.float32)
         
@@ -28,25 +25,21 @@ class FeatureNormalizer:
     def denormalize_y(self, y_norm):
         return y_norm * self.y_scales
 
-# Example scaling configuration - ADJUST THESE TO YOUR ACTUAL RANGES!
-# Current state (12 features) + desired state (12 features) = 24 total
+# Example scaling configuration
 X_SCALE_FACTORS = [
     # Current state features
-    1.0, 1.0, 1.0,        # x, y, z position (-5m to +5m)
-    np.pi/2, np.pi/30, np.pi/2,   # roll, pitch, yaw (-π to +π)
-    2.5, 2.5, 2.5,         # u, v, w velocities (-2m/s to +2m/s)
-    0.05, 0.05, 0.1,         # p, q, r angular velocities (-1rad/s to +1rad/s)
-    # Desired state features (same structure as current)
+    1.0, 1.0, 1.0,        
+    np.pi/2, np.pi/30, np.pi/2,
+    2.5, 2.5, 2.5,         
+    0.05, 0.05, 0.1,        
+    # Desired state features
     10.0, 10.0, 10.0,        
     1.0, 1.0, np.pi/2,
     5.0, 5.0, 5.0,        
     1.0, 1.0, 1.0
 ]
 
-# Output scaling - 6 thrusters
 Y_SCALE_FACTORS = [80.0,80.0,50.0,50.0,80.0,80.0]
-
-# Initialize normalizer
 normalizer = FeatureNormalizer(X_SCALE_FACTORS, Y_SCALE_FACTORS)
 
 # Load and process data
@@ -54,20 +47,26 @@ with h5py.File('mpc_data.h5', 'r') as hf:
     X = np.hstack((hf['x_current'][:], hf['x_desired'][:])).astype(np.float32)
     y = hf['u_opt'][:].astype(np.float32)
 
-# Split dataset
-X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+# Split dataset into train (60%), val (20%), test (20%)
+X_train_val, X_test, y_train_val, y_test = train_test_split(
+    X, y, test_size=0.2, shuffle=True, random_state=42)
+X_train, X_val, y_train, y_val = train_test_split(
+    X_train_val, y_train_val, test_size=0.25, shuffle=True, random_state=42)  # 0.25 * 0.8 = 0.2
 
 # Apply normalization
 X_train_norm = normalizer.normalize_x(X_train)
 X_val_norm = normalizer.normalize_x(X_val)
+X_test_norm = normalizer.normalize_x(X_test)
 y_train_norm = normalizer.normalize_y(y_train)
 y_val_norm = normalizer.normalize_y(y_val)
+y_test_norm = normalizer.normalize_y(y_test)
 
 # Create Tensor datasets
 train_dataset = TensorDataset(torch.FloatTensor(X_train_norm), torch.FloatTensor(y_train_norm))
 val_dataset = TensorDataset(torch.FloatTensor(X_val_norm), torch.FloatTensor(y_val_norm))
+test_dataset = TensorDataset(torch.FloatTensor(X_test_norm), torch.FloatTensor(y_test_norm))
 
-# Modified Network Architecture
+# Network Architecture (unchanged)
 class FossenNet(nn.Module):
     def __init__(self):
         super(FossenNet, self).__init__()
@@ -92,7 +91,6 @@ class FossenNet(nn.Module):
             nn.Linear(64, 6)
         )
         
-        # Initialize weights properly
         for layer in self.net:
             if isinstance(layer, nn.Linear):
                 nn.init.kaiming_normal_(layer.weight, nonlinearity='leaky_relu')
@@ -111,7 +109,6 @@ config = {
 }
 
 def train():
-    # Initialize model and components
     model = FossenNet()
     criterion = nn.MSELoss()
     optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
@@ -124,7 +121,7 @@ def train():
     no_improve = 0
     
     for epoch in range(config['epochs']):
-        # Training
+        # Training phase
         model.train()
         train_loss = 0
         for x_batch, y_batch in train_loader:
@@ -136,7 +133,7 @@ def train():
             optimizer.step()
             train_loss += loss.item()
         
-        # Validation
+        # Validation phase
         model.eval()
         val_loss = 0
         with torch.no_grad():
@@ -164,5 +161,63 @@ def train():
               f"Train: {avg_train:.4f} | Val: {avg_val:.4f} | "
               f"LR: {optimizer.param_groups[0]['lr']:.2e}")
 
+def evaluate_test_set():
+    model = FossenNet()
+    model.load_state_dict(torch.load('best_model.pth'))
+    model.eval()
+    
+    test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
+    
+    predictions = []
+    targets = []
+    with torch.no_grad():
+        for x_batch, y_batch in test_loader:
+            pred = model(x_batch)
+            predictions.append(pred.numpy())
+            targets.append(y_batch.numpy())
+    
+    predictions = np.vstack(predictions)
+    targets = np.vstack(targets)
+    
+    # Denormalize
+    predictions_denorm = normalizer.denormalize_y(predictions)
+    targets_denorm = normalizer.denormalize_y(targets)
+    
+    # Calculate metrics
+    metrics = {
+        'MAE': mean_absolute_error(targets_denorm, predictions_denorm),
+        'MSE': mean_squared_error(targets_denorm, predictions_denorm),
+        'RMSE': np.sqrt(mean_squared_error(targets_denorm, predictions_denorm)),
+        'R2': r2_score(targets_denorm, predictions_denorm)
+    }
+    
+    # Per-thruster metrics
+    thruster_metrics = []
+    for i in range(6):
+        thruster_metrics.append({
+            'Thruster': i+1,
+            'MAE': mean_absolute_error(targets_denorm[:, i], predictions_denorm[:, i]),
+            'MSE': mean_squared_error(targets_denorm[:, i], predictions_denorm[:, i]),
+            'RMSE': np.sqrt(mean_squared_error(targets_denorm[:, i], predictions_denorm[:, i])),
+            'R2': r2_score(targets_denorm[:, i], predictions_denorm[:, i])
+        })
+    
+    return metrics, thruster_metrics
+
 if __name__ == '__main__':
     train()
+    
+    # Evaluate on test set
+    metrics, thruster_metrics = evaluate_test_set()
+    
+    print("\nFinal Test Set Metrics:")
+    print(f"MAE: {metrics['MAE']:.4f}")
+    print(f"MSE: {metrics['MSE']:.4f}")
+    print(f"RMSE: {metrics['RMSE']:.4f}")
+    print(f"R²: {metrics['R2']:.4f}")
+    
+    print("\nPer-Thruster Metrics:")
+    for tm in thruster_metrics:
+        print(f"\nThruster {tm['Thruster']}:")
+        print(f"MAE: {tm['MAE']:.4f}  MSE: {tm['MSE']:.4f}")
+        print(f"RMSE: {tm['RMSE']:.4f}  R²: {tm['R2']:.4f}")

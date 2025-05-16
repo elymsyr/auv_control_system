@@ -1,8 +1,13 @@
+// g++ -std=c++17 -I"${CONDA_PREFIX}/include" -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" data_generate.cpp -lhdf5 -lhdf5_cpp -lz -ldl -lm -lcasadi -lipopt -lzmq -o data_generate
+
+#include <H5Cpp.h>
 #include <random>
 #include <casadi/casadi.hpp>
 #include <iostream>
+#include <vector>
 #include "casadi_mpc.hpp"
 using namespace casadi;
+using namespace H5;
 
 // --- Global random number generator ---
 std::random_device rd;
@@ -69,44 +74,76 @@ DM generate_X_desired() {
     return DM::vertcat({eta_d, nu_d});
 }
 
-// --- Serialize DM to CSV string ---
-std::string serialize_dm(const DM& m) {
-    std::stringstream ss;
+std::vector<double> dm_to_vector(const DM& m) {
+    std::vector<double> vec;
     for (casadi_int i = 0; i < m.size1(); ++i) {
-        ss << static_cast<double>(m(i));
-        if (i != m.size1() - 1) ss << ",";
+        vec.push_back(static_cast<double>(m(i)));
     }
-    return ss.str();
+    return vec;
 }
 
 int main() {
     try {
-        // Initialize vehicle model
+        // Initialize vehicle model and MPC
         VehicleModel model("config.json");
-
-        // Initialize MPC controller
         NonlinearMPC mpc(model);
 
-        // Open data file
-        std::ofstream data_file("mpc_data_test.csv");
-        data_file << "x_current,x_desired,u_opt,x_opt\n";
-        DM x_next = DM::zeros(12, 1);
+        // Data buffers
+        std::vector<double> x_current_buf, x_desired_buf, u_opt_buf, x_opt_buf;
+
         // Main data collection loop
-        for (int test = 0; test < 1; ++test) {
-            DM x0 = generate_X_current();
+        for (int test = 0; test < 10000; ++test) {
             DM x_desired = generate_X_desired();
             DM x_ref = DM::repmat(x_desired, 1, 11);
-            for (int step = 0; step < 10; ++step) {
+            DM x0 = generate_X_current();
+
+            for (int step = 0; step < 100; ++step) {
                 auto [u_opt, x_opt] = mpc.solve(x0, x_ref);
-                x_next = x_opt(Slice(), 1);
-                data_file << "'" << serialize_dm(x0) << "',"
-                          << "'" << serialize_dm(x_desired) << "',"
-                          << "'" << serialize_dm(u_opt) << "',"
-                          << "'" << serialize_dm(x_next) << "'\n";
+                DM x_next = x_opt(Slice(), 1);
+
+                // Store in buffers
+                auto x0_vec = dm_to_vector(x0);
+                auto xd_vec = dm_to_vector(x_desired);
+                auto u_vec = dm_to_vector(u_opt);
+                auto xn_vec = dm_to_vector(x_next);
+
+                x_current_buf.insert(x_current_buf.end(), x0_vec.begin(), x0_vec.end());
+                x_desired_buf.insert(x_desired_buf.end(), xd_vec.begin(), xd_vec.end());
+                u_opt_buf.insert(u_opt_buf.end(), u_vec.begin(), u_vec.end());
+                x_opt_buf.insert(x_opt_buf.end(), xn_vec.begin(), xn_vec.end());
+
                 x0 = x_next;
             }
         }
-        data_file.close();
+
+        // Create HDF5 file
+        H5File file("mpc_data.h5", H5F_ACC_TRUNC);
+
+        // Define dataset dimensions (10 samples x N features)
+        const hsize_t n_samples = 10;
+        const hsize_t xdims[2] = {n_samples, 12};  // For 12D states
+        const hsize_t udims[2] = {n_samples, 6};   // For 6D controls
+
+        // Create dataspace
+        DataSpace x_space(2, xdims);
+        DataSpace u_space(2, udims);
+
+        // Create datasets
+        DataSet ds_xcurr = file.createDataSet("x_current", 
+                            PredType::NATIVE_DOUBLE, x_space);
+        DataSet ds_xdes = file.createDataSet("x_desired", 
+                           PredType::NATIVE_DOUBLE, x_space);
+        DataSet ds_uopt = file.createDataSet("u_opt", 
+                           PredType::NATIVE_DOUBLE, u_space);
+        DataSet ds_xnext = file.createDataSet("x_opt", 
+                            PredType::NATIVE_DOUBLE, x_space);
+
+        // Write data
+        ds_xcurr.write(x_current_buf.data(), PredType::NATIVE_DOUBLE);
+        ds_xdes.write(x_desired_buf.data(), PredType::NATIVE_DOUBLE);
+        ds_uopt.write(u_opt_buf.data(), PredType::NATIVE_DOUBLE);
+        ds_xnext.write(x_opt_buf.data(), PredType::NATIVE_DOUBLE);
+
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
         return 1;
