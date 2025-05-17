@@ -6,6 +6,7 @@
 #include "casadi_mpc.hpp"
 #include <csignal>
 #include <atomic>
+#include <sys/stat.h>
 using namespace casadi;
 using namespace H5;
 
@@ -90,7 +91,7 @@ std::vector<double> dm_to_vector(const DM& m) {
 }
 
 // --- Configuration ---
-const int CHUNK_SIZE = 1000;      // Write every 1000 samples
+const int CHUNK_SIZE = 10;      // Write every 1000 samples
 const hsize_t MAX_DIMS[2] = {H5S_UNLIMITED, 12};  // Extendable dimensions
 const hsize_t CHUNK_DIMS[2] = {1000, 12};         // Chunk size for HDF5
 const hsize_t U_CHUNK[2] = {1000, 6};             // Control chunk size
@@ -190,36 +191,59 @@ void cleanup_hdf5() {
 
 void initialize_hdf5() {
     try {
-        file = new H5File("mpc_data.h5", H5F_ACC_TRUNC);
-        
-        // Create dataspace with initial size (0,12) and max size (unlimited,12)
-        hsize_t init_dims[2] = {0, 12};
-        hsize_t max_dims[2] = {H5S_UNLIMITED, 12};
-        DataSpace x_space(2, init_dims, max_dims);
+        // Check if file exists
+        bool file_exists = false;
+        struct stat buffer;
+        if (stat("mpc_data.h5", &buffer) == 0) {
+            file_exists = true;
+        }
 
-        hsize_t u_init[2] = {0, 6};
-        hsize_t u_max[2] = {H5S_UNLIMITED, 6};
-        DataSpace u_space(2, u_init, u_max);
+        // Open file in append mode if exists
+        if(file_exists) {
+            file = new H5File("mpc_data.h5", H5F_ACC_RDWR);
+            
+            // Open existing datasets
+            ds_xcurr = new DataSet(file->openDataSet("x_current"));
+            ds_xdes = new DataSet(file->openDataSet("x_desired"));
+            ds_uopt = new DataSet(file->openDataSet("u_opt"));
+            ds_xnext = new DataSet(file->openDataSet("x_opt"));
+            
+            // Get current dimensions
+            DataSpace space = ds_xcurr->getSpace();
+            space.getSimpleExtentDims(current_size);
+            std::cout << "Current size: " << current_size[0] << "\n";
+        } 
+        else {
+            file = new H5File("mpc_data.h5", H5F_ACC_TRUNC);
+            
+            // Create dataspace with initial size (0,12) and max size (unlimited,12)
+            hsize_t init_dims[2] = {0, 12};
+            hsize_t max_dims[2] = {H5S_UNLIMITED, 12};
+            DataSpace x_space(2, init_dims, max_dims);
 
-        // Rest of the code remains the same...
-        DSetCreatPropList x_props;
-        x_props.setChunk(2, CHUNK_DIMS);
-        x_props.setDeflate(6);
-        
-        DSetCreatPropList u_props;
-        u_props.setChunk(2, U_CHUNK);
-        u_props.setDeflate(6);
+            hsize_t u_init[2] = {0, 6};
+            hsize_t u_max[2] = {H5S_UNLIMITED, 6};
+            DataSpace u_space(2, u_init, u_max);
 
-        // Create datasets with corrected dataspaces
-        ds_xcurr = new DataSet(file->createDataSet(
-            "x_current", PredType::NATIVE_DOUBLE, x_space, x_props));
-        ds_xdes = new DataSet(file->createDataSet(
-            "x_desired", PredType::NATIVE_DOUBLE, x_space, x_props));
-        ds_uopt = new DataSet(file->createDataSet(
-            "u_opt", PredType::NATIVE_DOUBLE, u_space, u_props));
-        ds_xnext = new DataSet(file->createDataSet(
-            "x_opt", PredType::NATIVE_DOUBLE, x_space, x_props));
-        
+            // Rest of the code remains the same...
+            DSetCreatPropList x_props;
+            x_props.setChunk(2, CHUNK_DIMS);
+            x_props.setDeflate(6);
+            
+            DSetCreatPropList u_props;
+            u_props.setChunk(2, U_CHUNK);
+            u_props.setDeflate(6);
+
+            // Create datasets with corrected dataspaces
+            ds_xcurr = new DataSet(file->createDataSet(
+                "x_current", PredType::NATIVE_DOUBLE, x_space, x_props));
+            ds_xdes = new DataSet(file->createDataSet(
+                "x_desired", PredType::NATIVE_DOUBLE, x_space, x_props));
+            ds_uopt = new DataSet(file->createDataSet(
+                "u_opt", PredType::NATIVE_DOUBLE, u_space, u_props));
+            ds_xnext = new DataSet(file->createDataSet(
+                "x_opt", PredType::NATIVE_DOUBLE, x_space, x_props));
+        }
     } catch (const Exception& e) {
         std::cerr << "HDF5 Error: " << e.getCDetailMsg() << "\n";
         exit(1);
@@ -255,12 +279,6 @@ int main() {
                 x_desired_buf.insert(x_desired_buf.end(), xd_vec.begin(), xd_vec.end());
                 u_opt_buf.insert(u_opt_buf.end(), u_vec.begin(), u_vec.end());
                 x_opt_buf.insert(x_opt_buf.end(), xn_vec.begin(), xn_vec.end());
-
-                if (test % 100 == 0) {
-                    std::cout << "Processed " << test << " tests ("
-                              << current_size[0] << " samples)\n";
-                    H5Fflush(file->getId(), H5F_SCOPE_GLOBAL);
-                }
 
                 x0 = x_next;
             }
