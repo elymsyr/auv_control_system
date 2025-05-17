@@ -1,13 +1,20 @@
-// g++ -std=c++17 -I"${CONDA_PREFIX}/include" -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" data_generate.cpp -lhdf5 -lhdf5_cpp -lz -ldl -lm -lcasadi -lipopt -lzmq -o data_generate
-
 #include <H5Cpp.h>
 #include <random>
 #include <casadi/casadi.hpp>
 #include <iostream>
 #include <vector>
 #include "casadi_mpc.hpp"
+#include <csignal>
+#include <atomic>
 using namespace casadi;
 using namespace H5;
+
+std::atomic<bool> shutdown_requested(false);
+// --- Signal handler ---
+void sigint_handler(int) {
+    std::cout << "\nShutdown requested, finishing current work...\n";
+    shutdown_requested = true;
+}
 
 // --- Global random number generator ---
 std::random_device rd;
@@ -82,26 +89,163 @@ std::vector<double> dm_to_vector(const DM& m) {
     return vec;
 }
 
-int main() {
+// --- Configuration ---
+const int CHUNK_SIZE = 1000;      // Write every 1000 samples
+const hsize_t MAX_DIMS[2] = {H5S_UNLIMITED, 12};  // Extendable dimensions
+const hsize_t CHUNK_DIMS[2] = {1000, 12};         // Chunk size for HDF5
+const hsize_t U_CHUNK[2] = {1000, 6};             // Control chunk size
+
+// --- Global HDF5 handles ---
+H5File* file = nullptr;
+DataSet* ds_xcurr = nullptr;
+DataSet* ds_xdes = nullptr;
+DataSet* ds_uopt = nullptr;
+DataSet* ds_xnext = nullptr;
+hsize_t current_size[2] = {0, 12};  // Current dataset dimensions
+
+// --- Data buffers ---
+std::vector<double> x_current_buf, x_desired_buf, u_opt_buf, x_opt_buf;
+
+void write_chunk() {
     try {
+        if (x_current_buf.empty()) return;
+
+        // Determine number of new samples
+        const hsize_t n_new = x_current_buf.size() / 12;
+        
+        // Extend datasets
+        current_size[0] += n_new;
+        ds_xcurr->extend(current_size);
+        ds_xdes->extend(current_size);
+        hsize_t u_new_size[2] = {current_size[0], 6};
+        ds_uopt->extend(u_new_size);
+        ds_xnext->extend(current_size);
+
+        // Select hyperslab
+        hsize_t offset[2] = {current_size[0] - n_new, 0};
+        hsize_t count[2] = {n_new, 12};
+        DataSpace mem_space(2, count);
+        
+        // Write x_current
+        DataSpace file_space = ds_xcurr->getSpace();
+        file_space.selectHyperslab(H5S_SELECT_SET, count, offset);
+        ds_xcurr->write(x_current_buf.data(), PredType::NATIVE_DOUBLE, 
+                       mem_space, file_space);
+
+        // Write x_desired
+        file_space = ds_xdes->getSpace();
+        file_space.selectHyperslab(H5S_SELECT_SET, count, offset);
+        ds_xdes->write(x_desired_buf.data(), PredType::NATIVE_DOUBLE, 
+                       mem_space, file_space);
+
+        // Write u_opt
+        hsize_t u_count[2] = {n_new, 6};
+        DataSpace u_mem_space(2, u_count);
+        file_space = ds_uopt->getSpace();
+        file_space.selectHyperslab(H5S_SELECT_SET, u_count, offset);
+        ds_uopt->write(u_opt_buf.data(), PredType::NATIVE_DOUBLE, 
+                       u_mem_space, file_space);
+
+        // Write x_opt
+        file_space = ds_xnext->getSpace();
+        file_space.selectHyperslab(H5S_SELECT_SET, count, offset);
+        ds_xnext->write(x_opt_buf.data(), PredType::NATIVE_DOUBLE, 
+                       mem_space, file_space);
+
+        // Clear buffers
+        x_current_buf.clear();
+        x_desired_buf.clear();
+        u_opt_buf.clear();
+        x_opt_buf.clear();
+
+    } catch (const Exception& e) {
+        std::cerr << "HDF5 Write Error: " << e.getCDetailMsg() << "\n";
+        exit(1);
+    }
+}
+
+void cleanup_hdf5() {
+    try {
+        // Write any remaining data first
+        if (!x_current_buf.empty()) {
+            write_chunk();
+        }
+        
+        // Explicitly flush before closing
+        if (file) {
+            H5Fflush(file->getId(), H5F_SCOPE_GLOBAL);
+        }
+
+        // Then delete resources
+        if (ds_xnext) { delete ds_xnext; ds_xnext = nullptr; }
+        if (ds_uopt)  { delete ds_uopt;  ds_uopt  = nullptr; }
+        if (ds_xdes)  { delete ds_xdes;  ds_xdes  = nullptr; }
+        if (ds_xcurr) { delete ds_xcurr; ds_xcurr = nullptr; }
+        if (file)     { delete file;     file     = nullptr; }
+        
+    } catch (...) {
+        std::cerr << "Error during final cleanup\n";
+    }
+}
+
+void initialize_hdf5() {
+    try {
+        file = new H5File("mpc_data.h5", H5F_ACC_TRUNC);
+        
+        // Create dataspace with initial size (0,12) and max size (unlimited,12)
+        hsize_t init_dims[2] = {0, 12};
+        hsize_t max_dims[2] = {H5S_UNLIMITED, 12};
+        DataSpace x_space(2, init_dims, max_dims);
+
+        hsize_t u_init[2] = {0, 6};
+        hsize_t u_max[2] = {H5S_UNLIMITED, 6};
+        DataSpace u_space(2, u_init, u_max);
+
+        // Rest of the code remains the same...
+        DSetCreatPropList x_props;
+        x_props.setChunk(2, CHUNK_DIMS);
+        x_props.setDeflate(6);
+        
+        DSetCreatPropList u_props;
+        u_props.setChunk(2, U_CHUNK);
+        u_props.setDeflate(6);
+
+        // Create datasets with corrected dataspaces
+        ds_xcurr = new DataSet(file->createDataSet(
+            "x_current", PredType::NATIVE_DOUBLE, x_space, x_props));
+        ds_xdes = new DataSet(file->createDataSet(
+            "x_desired", PredType::NATIVE_DOUBLE, x_space, x_props));
+        ds_uopt = new DataSet(file->createDataSet(
+            "u_opt", PredType::NATIVE_DOUBLE, u_space, u_props));
+        ds_xnext = new DataSet(file->createDataSet(
+            "x_opt", PredType::NATIVE_DOUBLE, x_space, x_props));
+        
+    } catch (const Exception& e) {
+        std::cerr << "HDF5 Error: " << e.getCDetailMsg() << "\n";
+        exit(1);
+    }
+}
+
+int main() {
+    std::signal(SIGINT, sigint_handler);
+    try {
+        initialize_hdf5();
+        
         // Initialize vehicle model and MPC
         VehicleModel model("config.json");
         NonlinearMPC mpc(model);
 
-        // Data buffers
-        std::vector<double> x_current_buf, x_desired_buf, u_opt_buf, x_opt_buf;
-
         // Main data collection loop
-        for (int test = 0; test < 10000; ++test) {
+        for (int test = 0; test < 100000 && !shutdown_requested; ++test) {
             DM x_desired = generate_X_desired();
             DM x_ref = DM::repmat(x_desired, 1, 11);
             DM x0 = generate_X_current();
 
-            for (int step = 0; step < 100; ++step) {
+            for (int step = 0; step < 10 && !shutdown_requested; ++step) {
                 auto [u_opt, x_opt] = mpc.solve(x0, x_ref);
                 DM x_next = x_opt(Slice(), 1);
 
-                // Store in buffers
+                // Append to buffers
                 auto x0_vec = dm_to_vector(x0);
                 auto xd_vec = dm_to_vector(x_desired);
                 auto u_vec = dm_to_vector(u_opt);
@@ -112,41 +256,33 @@ int main() {
                 u_opt_buf.insert(u_opt_buf.end(), u_vec.begin(), u_vec.end());
                 x_opt_buf.insert(x_opt_buf.end(), xn_vec.begin(), xn_vec.end());
 
+                if (test % 100 == 0) {
+                    std::cout << "Processed " << test << " tests ("
+                              << current_size[0] << " samples)\n";
+                    H5Fflush(file->getId(), H5F_SCOPE_GLOBAL);
+                }
+
                 x0 = x_next;
             }
+            std::cout << "Remaining Steps: " << 100000 - test << "\n";
         }
 
-        // Create HDF5 file
-        H5File file("mpc_data.h5", H5F_ACC_TRUNC);
+        // Write remaining data
+        write_chunk();
 
-        // Define dataset dimensions (10 samples x N features)
-        const hsize_t n_samples = 10;
-        const hsize_t xdims[2] = {n_samples, 12};  // For 12D states
-        const hsize_t udims[2] = {n_samples, 6};   // For 6D controls
-
-        // Create dataspace
-        DataSpace x_space(2, xdims);
-        DataSpace u_space(2, udims);
-
-        // Create datasets
-        DataSet ds_xcurr = file.createDataSet("x_current", 
-                            PredType::NATIVE_DOUBLE, x_space);
-        DataSet ds_xdes = file.createDataSet("x_desired", 
-                           PredType::NATIVE_DOUBLE, x_space);
-        DataSet ds_uopt = file.createDataSet("u_opt", 
-                           PredType::NATIVE_DOUBLE, u_space);
-        DataSet ds_xnext = file.createDataSet("x_opt", 
-                            PredType::NATIVE_DOUBLE, x_space);
-
-        // Write data
-        ds_xcurr.write(x_current_buf.data(), PredType::NATIVE_DOUBLE);
-        ds_xdes.write(x_desired_buf.data(), PredType::NATIVE_DOUBLE);
-        ds_uopt.write(u_opt_buf.data(), PredType::NATIVE_DOUBLE);
-        ds_xnext.write(x_opt_buf.data(), PredType::NATIVE_DOUBLE);
+        // Cleanup
+        delete ds_xnext;
+        delete ds_uopt;
+        delete ds_xdes;
+        delete ds_xcurr;
+        delete file;
+        cleanup_hdf5();
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
+        cleanup_hdf5();
         return 1;
     }
+    cleanup_hdf5();
     return 0;
 }

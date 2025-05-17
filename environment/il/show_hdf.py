@@ -2,7 +2,7 @@ import h5py
 import numpy as np
 
 # 1. Load the HDF5 file
-with h5py.File('data/mpc_data_1.h5', 'r') as hf:
+with h5py.File('mpc_data.h5', 'r') as hf:
     print("Datasets in the HDF5 file:", list(hf.keys()))
     x_current = hf['x_current'][:]
     x_desired = hf['x_desired'][:]
