@@ -91,9 +91,10 @@
             "width": 0.4,
             "height": 0.3,
             "length": 0.6,
-            "lm": 0.15,
+            "lm": 0.3,
             "wf": 0.2,
-            "lr": 0.3
+            "lr": 0.3,
+            "rf": 0.25
         },
         "center_of_buoancy": {
             "unit": "meter",

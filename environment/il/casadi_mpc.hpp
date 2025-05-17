@@ -112,8 +112,7 @@ public:
 
     MX get_A_matrix() const { return A_; }
     MX get_M_inv() const { return M_inv_; }
-    double get_p_front_mid_max() const { return p_front_mid_max_; }
-    double get_p_rear_max() const { return p_rear_max_; }
+    double get_p_max() const { return p_max_; }
 
 private:
     void load_config(const std::string& path) {
@@ -166,6 +165,7 @@ private:
         lm_ = dim["lm"].get<double>();
         wf_ = dim["wf"].get<double>();
         lr_ = dim["lr"].get<double>();
+        rf_ = dim["rf"].get<double>();
 
         // Mass and parameters
         mass_ = config["mass"]["value"].get<double>();
@@ -206,8 +206,7 @@ private:
 
         // Propeller parameters
         auto propeller = dynamics["propeller"];
-        p_rear_max_ = propeller["force_range_r"]["max"].get<double>();
-        p_front_mid_max_ = propeller["force_range_f_m"]["max"].get<double>();
+        p_max_ = propeller["force_range_r"]["max"].get<double>();
 
         // Weight and buoyancy
         W_ = mass_ * g_;
@@ -263,12 +262,12 @@ private:
         Dn_ = MX::blockcat({{Dn_lin, MX::zeros(3,3)}, {MX::zeros(3,3), Dn_ang}});
         
         A_ = MX::vertcat({
-            MX::horzcat({1, 1, cos(a_), cos(a_), 0, 0}),
-            MX::horzcat({0, 0, -sin(a_), sin(a_), 0, 0}),
-            MX::horzcat({0, 0, 0, 0, 1, 1}),
-            MX::horzcat({0, 0, 0, 0, lm_, -lm_}),
-            MX::horzcat({0, 0, 0, 0, 0, 0}),
-            MX::horzcat({-wf_, wf_, lr_*sin(a_), -lr_*sin(a_), 0, 0})
+            MX::horzcat({1, 1, cos(a_), cos(a_), 0, 0, 0, 0}),
+            MX::horzcat({0, 0, sin(a_), sin(a_), 0, 0, 0, 0}),
+            MX::horzcat({0, 0, 0, 0, 1, 1, 0, 0}),
+            MX::horzcat({0, 0, 0, 0, lm_, -lm_, lm_, -lm_}),
+            MX::horzcat({0, 0, 0, 0, rf_, rf_, -rf_, -rf_}),
+            MX::horzcat({-wf_, wf_, -lr_*sin(a_), lr_*sin(a_), 0, 0, 0, 0})
         });
     }
 
@@ -277,13 +276,14 @@ private:
     double Lxx_, Lxy_, Lxz_, Lyx_, Lyy_, Lyz_, Lzx_, Lzy_, Lzz_;
     double r_x_, r_y_, r_z_;
     double x_B_, y_B_, z_B_;
-    double w_, h_, l_, lm_, wf_, lr_;
+    double w_, h_, l_, lm_, wf_, lr_, rf_;
     double mass_, a_, volume_;
     double fluid_density_, displaced_volume_, g_;
     double D_u_, D_v_, D_w_, D_p_, D_q_, D_r_;
     double Dn_u_, Dn_v_, Dn_w_, Dn_p_, Dn_q_, Dn_r_;
     double C_X_, C_Y_, C_Z_, C_Y_r_, C_Z_q_, C_K_, C_M_, C_N_;
     double p_rear_max_, p_front_mid_max_;
+    double p_max_;
     double W_, B_, W_minus_B_;
 
     MX r_g_, r_B_;
@@ -294,7 +294,7 @@ private:
 class NonlinearMPC {
     public:
         NonlinearMPC(const VehicleModel& model, int N = 10, double dt = 0.1)
-            : model_(model), N_(N), dt_(dt), nx_(12), nu_(6), prev_sol_(std::nullopt) {
+            : model_(model), N_(N), dt_(dt), nx_(12), nu_(8), prev_sol_(std::nullopt) { // Changed nu_ to 8
             setup_optimization();
         }
         
@@ -417,22 +417,20 @@ class NonlinearMPC {
                 );
                 opti_.subject_to(X_(Slice(), k + 1) == x_next);
             }
-            
-            opti_.subject_to(X_(Slice(), 0) == x0_param_);
-            double p_front = model_.get_p_front_mid_max();
-            double p_rear  = model_.get_p_rear_max();
+
+            double p_max = model_.get_p_max();
             for (int k = 0; k < N_; ++k) {
-                opti_.subject_to(opti_.bounded(-p_front, U_(Slice(0, 2), k), p_front));
-                opti_.subject_to(opti_.bounded(-p_rear, U_(Slice(2, 4), k), p_rear));
-                opti_.subject_to(opti_.bounded(-p_front, U_(Slice(4, 6), k), p_front));
+                opti_.subject_to(opti_.bounded(-p_max, U_(Slice(0, 2), k), p_max));
+                opti_.subject_to(opti_.bounded(-p_max,  U_(Slice(2, 4), k), p_max));
+                opti_.subject_to(opti_.bounded(-p_max, U_(Slice(4, 8), k), p_max));
             }
-            
+
             opti_.minimize(cost);
             Dict opts = {
                 {"ipopt.print_level", 0},
                 {"print_time", 0},
                 {"ipopt.sb", "yes"},
-                {"ipopt.max_iter", 100},
+                {"ipopt.max_iter", 500},
                 {"ipopt.tol", 1e-5},
                 {"ipopt.linear_solver", "mumps"},
                 {"ipopt.mu_init", 1e-2},
