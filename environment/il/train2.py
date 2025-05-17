@@ -164,7 +164,7 @@ class FossenNet(nn.Module):
 
 # Training configuration
 config = {
-    'batch_size': 128,
+    'batch_size': 256,
     'lr': 3e-4,
     'epochs': 5,
     'weight_decay': 1e-6,
@@ -177,8 +177,8 @@ def train():
     optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=7, factor=0.5)
     
-    train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=config['batch_size'], num_workers=4)
+    train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=2)
+    val_loader = DataLoader(val_dataset, batch_size=config['batch_size'], num_workers=2)
     
     best_loss = float('inf')
     no_improve = 0
@@ -229,7 +229,7 @@ def evaluate_test_set():
     model.load_state_dict(torch.load('best_model.pth'))
     model.eval()
     
-    test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=2)
     
     predictions = []
     targets = []
