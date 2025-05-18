@@ -112,8 +112,7 @@ public:
 
     MX get_A_matrix() const { return A_; }
     MX get_M_inv() const { return M_inv_; }
-    double get_p_front_mid_max() const { return p_front_mid_max_; }
-    double get_p_rear_max() const { return p_rear_max_; }
+    double get_p_max() const { return p_max_; }
 
 private:
     void load_config(const std::string& path) {
@@ -207,8 +206,7 @@ private:
 
         // Propeller parameters
         auto propeller = dynamics["propeller"];
-        p_rear_max_ = propeller["force_range_r"]["max"].get<double>();
-        p_front_mid_max_ = propeller["force_range_f_m"]["max"].get<double>();
+        p_max_ = propeller["force_range_r"]["max"].get<double>();
 
         // Weight and buoyancy
         W_ = mass_ * g_;
@@ -285,6 +283,7 @@ private:
     double Dn_u_, Dn_v_, Dn_w_, Dn_p_, Dn_q_, Dn_r_;
     double C_X_, C_Y_, C_Z_, C_Y_r_, C_Z_q_, C_K_, C_M_, C_N_;
     double p_rear_max_, p_front_mid_max_;
+    double p_max_;
     double W_, B_, W_minus_B_;
 
     MX r_g_, r_B_;
@@ -295,7 +294,7 @@ private:
 class NonlinearMPC {
     public:
         NonlinearMPC(const VehicleModel& model, int N = 10, double dt = 0.1)
-            : model_(model), N_(N), dt_(dt), nx_(12), nu_(8), prev_sol_(std::nullopt) {
+            : model_(model), N_(N), dt_(dt), nx_(12), nu_(8), prev_sol_(std::nullopt) { // Changed nu_ to 8
             setup_optimization();
         }
         
@@ -307,16 +306,20 @@ class NonlinearMPC {
                 DM prev_X = prev_sol_->value(X_);
                 DM prev_U = prev_sol_->value(U_);
                 
-                // Create sparse shift operation
+                // Better warm-start: shift and repeat last input
                 DM X_guess = horzcat(prev_X(Slice(), Slice(1, N_+1)), 
-                                    prev_X(Slice(), N_));
+                                repmat(prev_X(Slice(), N_), 1, 1));
                 DM U_guess = horzcat(prev_U(Slice(), Slice(1, N_)), 
-                                    prev_U(Slice(), N_-1));
+                                repmat(prev_U(Slice(), N_-1), 1, 1));
                 
-                opti_.set_initial(X_, X_guess);
-                opti_.set_initial(U_, U_guess);
+                // Add noise to prevent solver stagnation
+                DM noise_X = DM::rand(nx_, N_+1)*0.01;
+                DM noise_U = DM::rand(nu_, N_)*0.01;
+                
+                opti_.set_initial(X_, X_guess + noise_X);
+                opti_.set_initial(U_, U_guess + noise_U);
             }
-            
+
             try {
                 auto sol = opti_.solve();
                 prev_sol_ = sol;
@@ -351,7 +354,18 @@ class NonlinearMPC {
             MX u_sym    = MX::sym("u", 8);
             auto dyn_pair = model_.dynamics(eta_sym, nu_sym, u_sym);
             MX xdot = simplify(MX::vertcat({dyn_pair.first, dyn_pair.second}));
-            
+
+            for(int k=0; k<=N_; ++k) {
+                // Euler angle limits
+                opti_.subject_to(X_(3,k) <= M_PI/2);  // Max roll
+                opti_.subject_to(X_(4,k) <= M_PI/2);  // Max pitch
+                opti_.subject_to(X_(5,k) <= M_PI);    // Max yaw
+                
+                // Velocity limits
+                opti_.subject_to(opti_.bounded(-10.0, X_(Slice(6,9), k), 10.0));  // Linear
+                opti_.subject_to(opti_.bounded(-2.0, X_(Slice(9,12), k), 2.0)); // Angular
+            }
+
             Dict external_options;
             // external_options["enable_fd"] = true;  // Use finite differences
             external_options["jit"] = true;  // Use finite differences
@@ -382,10 +396,10 @@ class NonlinearMPC {
             }
             dynamics_func = external("dynamics_func", "./libdynamics_func2.so", external_options);
 
-            MX Q = MX::diag(MX::vertcat({1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+            MX Q = MX::diag(MX::vertcat({10.0, 10.0, 10.0, 1.0, 1.0, 1.0,
                                          0.1, 0.1, 0.1, 0.1, 0.1, 0.1}));
             MX R = MX::diag(MX(std::vector<double>(8, 0.01)));
-
+            
             MX cost = 0;
             for (int k = 0; k <= N_; ++k) {
                 MX state_error = X_(Slice(), k) - x_ref_param_(Slice(), k);
@@ -419,13 +433,11 @@ class NonlinearMPC {
                 opti_.subject_to(X_(Slice(), k + 1) == x_next);
             }
 
-            opti_.subject_to(X_(Slice(), 0) == x0_param_);
-            double p_front = model_.get_p_front_mid_max();
-            double p_rear  = model_.get_p_rear_max();
+            double p_max = model_.get_p_max();
             for (int k = 0; k < N_; ++k) {
-                opti_.subject_to(opti_.bounded(-p_front, U_(Slice(0, 2), k), p_front));
-                opti_.subject_to(opti_.bounded(-p_rear, U_(Slice(2, 4), k), p_rear));
-                opti_.subject_to(opti_.bounded(-p_front, U_(Slice(4, 8), k), p_front));
+                opti_.subject_to(opti_.bounded(-p_max, U_(Slice(0, 2), k), p_max));
+                opti_.subject_to(opti_.bounded(-p_max,  U_(Slice(2, 4), k), p_max));
+                opti_.subject_to(opti_.bounded(-p_max, U_(Slice(4, 8), k), p_max));
             }
 
             opti_.minimize(cost);
@@ -433,9 +445,9 @@ class NonlinearMPC {
                 {"ipopt.print_level", 0},
                 {"print_time", 0},
                 {"ipopt.sb", "yes"},
-                {"ipopt.max_iter", 1000},
+                {"ipopt.max_iter", 400},
                 {"ipopt.tol", 1e-5},
-                {"ipopt.linear_solver", "mumps"},
+                {"ipopt.linear_solver", "mumps"},  // Problematic if MUMPS not installed
                 {"ipopt.mu_init", 1e-2},
                 {"ipopt.acceptable_tol", 1e-5},
                 {"ipopt.hessian_approximation", "limited-memory"},
@@ -445,90 +457,91 @@ class NonlinearMPC {
         }
     };
 
-    // int main() {
-    //     try {
-    //         // Initialize your model and MPC controller.
-    //         VehicleModel model("config.json");
-    //         NonlinearMPC mpc(model);
+    int main() {
+        try {
+            // Initialize your model and MPC controller.
+            VehicleModel model("config.json");
+            NonlinearMPC mpc(model);
+            
+            // Initial state x0 and reference trajectory x_ref (as DM)
+            DM x0 = DM::zeros(12);
+            DM x_ref = DM::repmat(DM::vertcat({20, 15, -6, 0, 0, -1, 0, 0, 0, 0, 0, 0}), 1, 11);
+    
+            // // Set up ZeroMQ context and a REQ socket to communicate with Python.
+            // zmq::context_t context(1);
+            // zmq::socket_t socket(context, zmq::socket_type::req);
+            // socket.connect("tcp://localhost:5555");
+    
+            // // --- Send initial state data as binary ---
+            // std::vector<double> init_state(12);
+            // for (int i = 0; i < 12; ++i) {
+            //     init_state[i] = static_cast<double>(x0(i));
+            // }
+            // zmq::message_t init_msg(init_state.size() * sizeof(double));
+            // memcpy(init_msg.data(), init_state.data(), init_msg.size());
+            // (void)socket.send(init_msg, zmq::send_flags::none);
+            
+            // // Wait for a short acknowledgment from Python (if your protocol requires it)
+            // zmq::message_t ack;
+            // (void)socket.recv(ack, zmq::recv_flags::none);
+    
+            // Start overall timing
+            auto total_start = std::chrono::high_resolution_clock::now();
+            int ignore_first = 10;
+            std::vector<double> iteration_times;
+            // Main control loop (10 steps)
+            for (int step = 0; step < 10; ++step) {
+                // Solve MPC and time the iteration
+                auto iter_start = std::chrono::high_resolution_clock::now();
+                auto [u_opt, x_opt] = mpc.solve(x0, x_ref);
+                auto iter_end = std::chrono::high_resolution_clock::now();
+                auto iter_duration = std::chrono::duration_cast<std::chrono::milliseconds>(iter_end - iter_start).count();
+                
+                x0 = x_opt(Slice(), 1);
 
-    //         // Initial state x0 and reference trajectory x_ref (as DM)
-    //         DM x0 = DM::zeros(12);
-    //         DM x_ref = DM::repmat(DM::vertcat({10.8, 9.9, -6, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, 11);
-    
-    //         // // Set up ZeroMQ context and a REQ socket to communicate with Python.
-    //         // zmq::context_t context(1);
-    //         // zmq::socket_t socket(context, zmq::socket_type::req);
-    //         // socket.connect("tcp://localhost:5555");
-    
-    //         // // --- Send initial state data as binary ---
-    //         // std::vector<double> init_state(12);
-    //         // for (int i = 0; i < 12; ++i) {
-    //         //     init_state[i] = static_cast<double>(x0(i));
-    //         // }
-    //         // zmq::message_t init_msg(init_state.size() * sizeof(double));
-    //         // memcpy(init_msg.data(), init_state.data(), init_msg.size());
-    //         // (void)socket.send(init_msg, zmq::send_flags::none);
-            
-    //         // // Wait for a short acknowledgment from Python (if your protocol requires it)
-    //         // zmq::message_t ack;
-    //         // (void)socket.recv(ack, zmq::recv_flags::none);
-    
-    //         // Start overall timing
-    //         auto total_start = std::chrono::high_resolution_clock::now();
-    //         int ignore_first = 10;
-    //         std::vector<double> iteration_times;
-    //         // Main control loop (100 steps)
-    //         for (int step = 0; step < 100; ++step) {
-    //             // Solve MPC and time the iteration
-    //             auto iter_start = std::chrono::high_resolution_clock::now();
-    //             auto [u_opt, x_opt] = mpc.solve(x0, x_ref);
-    //             auto iter_end = std::chrono::high_resolution_clock::now();
-    //             auto iter_duration = std::chrono::duration_cast<std::chrono::milliseconds>(iter_end - iter_start).count();
-    //             // Update state (for next iteration)
-    //             x0 = x_opt(Slice(), 1);
-    //             auto state_error = x_ref(Slice(), 0) - x0;
-                
-    //             std::cout << "Step " << step << "\n"
-    //                       << "  controls: " << u_opt << "\n"
-    //                       << "  state: " << x0 << "\n"
-    //                       << "  state error: " << state_error << "\n"
-    //                       << "  Iteration time: " << iter_duration << " ms\n";
+                // std::cout << x_opt << "\n";
 
-    //             if (step >= ignore_first) {
-    //                 iteration_times.push_back(iter_duration);
-    //             }
+                std::cout << "Step " << step << "\n"
+                          << "  controls: " << u_opt << "\n"
+                          << "  state: " << x0 << "\n"
+                          << "  state error: " << x0 - x_opt(Slice(), -1) << "\n"
+                          << "  Iteration time: " << iter_duration << " ms\n";
+
+                if (step >= ignore_first) {
+                    iteration_times.push_back(iter_duration);
+                }
                 
-    //             // // --- Prepare and send the new state as binary ---
-    //             // std::vector<double> state_vec(12);
-    //             // for (int i = 0; i < 12; ++i) {
-    //             //     state_vec[i] = static_cast<double>(x0(i));
-    //             // }
-    //             // zmq::message_t state_msg(state_vec.size() * sizeof(double));
-    //             // memcpy(state_msg.data(), state_vec.data(), state_msg.size());
+                // // --- Prepare and send the new state as binary ---
+                // std::vector<double> state_vec(12);
+                // for (int i = 0; i < 12; ++i) {
+                //     state_vec[i] = static_cast<double>(x0(i));
+                // }
+                // zmq::message_t state_msg(state_vec.size() * sizeof(double));
+                // memcpy(state_msg.data(), state_vec.data(), state_msg.size());
                 
-    //             // // Send the binary state data to Python.
-    //             // (void)socket.send(state_msg, zmq::send_flags::none);
+                // // Send the binary state data to Python.
+                // (void)socket.send(state_msg, zmq::send_flags::none);
                 
-    //             // // Wait for Python's reply before continuing (this is required for REQ/REP pattern).
-    //             // zmq::message_t reply;
-    //             // (void)socket.recv(reply, zmq::recv_flags::none);
-    //         }
+                // // Wait for Python's reply before continuing (this is required for REQ/REP pattern).
+                // zmq::message_t reply;
+                // (void)socket.recv(reply, zmq::recv_flags::none);
+            }
             
-    //         auto total_end = std::chrono::high_resolution_clock::now();
-    //         auto total_duration = std::chrono::duration_cast<std::chrono::milliseconds>(total_end - total_start).count();
-    //         std::cout << "Total runtime for 100 steps: " << total_duration << " ms\n";
-    //         std::cout << "Average iteration time (excluding first 10): " 
-    //                   << std::accumulate(iteration_times.begin(), iteration_times.end(), 0.0) / iteration_times.size() << " ms\n";
-    //         double sum = std::accumulate(iteration_times.begin(), iteration_times.end(), 0.0);
-    //         double mean = sum / iteration_times.size();
-    //         double sq_sum = std::accumulate(iteration_times.begin(), iteration_times.end(), 0.0, 
-    //                                         [mean](double acc, double val) { return acc + (val - mean) * (val - mean); });
-    //         double stddev = std::sqrt(sq_sum / iteration_times.size());
-    //         std::cout << "Standard deviation of iteration times (excluding first 10): " << stddev << " ms\n";
+            auto total_end = std::chrono::high_resolution_clock::now();
+            auto total_duration = std::chrono::duration_cast<std::chrono::milliseconds>(total_end - total_start).count();
+            std::cout << "Total runtime for 100 steps: " << total_duration << " ms\n";
+            std::cout << "Average iteration time (excluding first 10): " 
+                      << std::accumulate(iteration_times.begin(), iteration_times.end(), 0.0) / iteration_times.size() << " ms\n";
+            double sum = std::accumulate(iteration_times.begin(), iteration_times.end(), 0.0);
+            double mean = sum / iteration_times.size();
+            double sq_sum = std::accumulate(iteration_times.begin(), iteration_times.end(), 0.0, 
+                                            [mean](double acc, double val) { return acc + (val - mean) * (val - mean); });
+            double stddev = std::sqrt(sq_sum / iteration_times.size());
+            std::cout << "Standard deviation of iteration times (excluding first 10): " << stddev << " ms\n";
             
-    //     } catch (const std::exception& e) {
-    //         std::cerr << "Error: " << e.what() << "\n";
-    //         return 1;
-    //     }
-    //     return 0;
-    // }
+        } catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << "\n";
+            return 1;
+        }
+        return 0;
+    }

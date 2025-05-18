@@ -432,7 +432,7 @@ class NonlinearMPC {
                 {"ipopt.print_level", 0},
                 {"print_time", 0},
                 {"ipopt.sb", "yes"},
-                {"ipopt.max_iter", 100},
+                {"ipopt.max_iter", 1000},
                 {"ipopt.tol", 1e-5},
                 {"ipopt.linear_solver", "mumps"},
                 {"ipopt.mu_init", 1e-2},
@@ -487,10 +487,10 @@ class NonlinearMPC {
                 // Update state (for next iteration)
                 x0 = x_opt(Slice(), 1);
                 
-                // std::cout << "Step " << step << "\n"
-                //           << "  controls: " << u_opt << "\n"
-                //           << "  state: " << x0 << "\n"
-                //           << "  Iteration time: " << iter_duration << " ms\n";
+                std::cout << "Step " << step << "\n"
+                          << "  controls: " << u_opt << "\n"
+                          << "  state: " << x0 << "\n"
+                          << "  Iteration time: " << iter_duration << " ms\n";
 
                 if (step >= ignore_first) {
                     iteration_times.push_back(iter_duration);

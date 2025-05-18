@@ -94,7 +94,7 @@ std::vector<double> dm_to_vector(const DM& m) {
 const int CHUNK_SIZE = 10;      // Write every 1000 samples
 const hsize_t MAX_DIMS[2] = {H5S_UNLIMITED, 12};  // Extendable dimensions
 const hsize_t CHUNK_DIMS[2] = {1000, 12};         // Chunk size for HDF5
-const hsize_t U_CHUNK[2] = {1000, 6};             // Control chunk size
+const hsize_t U_CHUNK[2] = {1000, 8};             // Control chunk size
 
 // --- Global HDF5 handles ---
 H5File* file = nullptr;
@@ -118,7 +118,7 @@ void write_chunk() {
         current_size[0] += n_new;
         ds_xcurr->extend(current_size);
         ds_xdes->extend(current_size);
-        hsize_t u_new_size[2] = {current_size[0], 6};
+        hsize_t u_new_size[2] = {current_size[0], 8};
         ds_uopt->extend(u_new_size);
         ds_xnext->extend(current_size);
 
@@ -140,7 +140,7 @@ void write_chunk() {
                        mem_space, file_space);
 
         // Write u_opt
-        hsize_t u_count[2] = {n_new, 6};
+        hsize_t u_count[2] = {n_new, 8};
         DataSpace u_mem_space(2, u_count);
         file_space = ds_uopt->getSpace();
         file_space.selectHyperslab(H5S_SELECT_SET, u_count, offset);
@@ -221,8 +221,8 @@ void initialize_hdf5() {
             hsize_t max_dims[2] = {H5S_UNLIMITED, 12};
             DataSpace x_space(2, init_dims, max_dims);
 
-            hsize_t u_init[2] = {0, 6};
-            hsize_t u_max[2] = {H5S_UNLIMITED, 6};
+            hsize_t u_init[2] = {0, 8};
+            hsize_t u_max[2] = {H5S_UNLIMITED, 8};
             DataSpace u_space(2, u_init, u_max);
 
             // Rest of the code remains the same...

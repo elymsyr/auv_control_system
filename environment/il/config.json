@@ -58,7 +58,7 @@
                     "max": 80.0
                 },
                 "force_range_r": {
-                    "unit": "newton_meter",
+                    "unit": "newton",
                     "max": 50.0
                 }
             }
