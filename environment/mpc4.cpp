@@ -294,7 +294,7 @@ private:
 
 class NonlinearMPC {
     public:
-        NonlinearMPC(const VehicleModel& model, int N = 10, double dt = 0.1)
+        NonlinearMPC(const VehicleModel& model, int N = 20, double dt = 0.1)
             : model_(model), N_(N), dt_(dt), nx_(12), nu_(8), prev_sol_(std::nullopt) {
             setup_optimization();
         }
@@ -390,7 +390,7 @@ class NonlinearMPC {
             }
             dynamics_func = external("dynamics_func", "./libdynamics_func2.so", external_options);
 
-            MX Q = MX::diag(MX::vertcat({10.0, 10.0, 10.0, 1.0, 1.0, 1.0,
+            MX Q = MX::diag(MX::vertcat({2.0, 2.0, 2.0, 1.0, 1.0, 1.0,
                                          0.1, 0.1, 0.1, 0.1, 0.1, 0.1}));
             MX R = MX::diag(MX(std::vector<double>(8, 0.1)));
 
@@ -457,11 +457,14 @@ class NonlinearMPC {
         try {
             // Initialize your model and MPC controller.
             VehicleModel model("config.json");
-            NonlinearMPC mpc(model);
-
+            int N = 20;
+            NonlinearMPC mpc(model, N = N);
+            
             // Initial state x0 and reference trajectory x_ref (as DM)
-            DM x0 = DM::zeros(12);
-            DM x_ref = DM::repmat(DM::vertcat({10.8, 9.9, -6, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, 11);
+            DM x0 = DM::vertcat({-8.71521, 2.23681, -9.21781, 0, 0, 2.73828, 0, 0, 0, 0, 0, 0});
+            DM x_ref = DM::repmat(DM::vertcat({0, 0, 0, 0.641568, -1.45498, -1.92702, 0.764411, 0.931398, 3.29693, -0.00794386, 0.0135156, 0.0432392}), 1, N+1);
+            // State X: [0, 0, 0, 0.641568, -1.45498, -1.92702, 0.764411, 0.931398, 3.29693, -0.00794386, 0.0135156, 0.0432392]
+            // State Y: [-8.71521, 2.23681, -9.21781, 0, 0, 2.73828, 0, 0, 0, 0, 0, 0]
 
             // // Set up ZeroMQ context and a REQ socket to communicate with Python.
             // zmq::context_t context(1);

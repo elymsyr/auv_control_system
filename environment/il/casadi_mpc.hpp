@@ -294,10 +294,12 @@ private:
 
 class NonlinearMPC {
     public:
-        NonlinearMPC(const VehicleModel& model, int N = 10, double dt = 0.1)
+        NonlinearMPC(const VehicleModel& model, int N = 20, double dt = 0.1)
             : model_(model), N_(N), dt_(dt), nx_(12), nu_(8), prev_sol_(std::nullopt) {
             setup_optimization();
         }
+
+        void reset_previous_solution() { prev_sol_ = std::nullopt; }
         
         std::pair<DM, DM> solve(const DM& x0, const DM& x_ref) {
             opti_.set_value(x0_param_, x0);
@@ -390,7 +392,7 @@ class NonlinearMPC {
             }
             dynamics_func = external("dynamics_func", "./libdynamics_func2.so", external_options);
 
-            MX Q = MX::diag(MX::vertcat({10.0, 10.0, 10.0, 1.0, 1.0, 1.0,
+            MX Q = MX::diag(MX::vertcat({2.0, 2.0, 2.0, 1.0, 1.0, 1.0,
                                          0.1, 0.1, 0.1, 0.1, 0.1, 0.1}));
             MX R = MX::diag(MX(std::vector<double>(8, 0.1)));
 
@@ -446,6 +448,7 @@ class NonlinearMPC {
                 {"ipopt.linear_solver", "mumps"},
                 {"ipopt.mu_init", 1e-2},
                 {"ipopt.acceptable_tol", 1e-4},  // Loosened from 1e-5
+                {"ipopt.acceptable_iter", 10},
                 {"ipopt.hessian_approximation", "limited-memory"},
                 {"ipopt.nlp_scaling_method", "gradient-based"}
             };
@@ -457,11 +460,12 @@ class NonlinearMPC {
     //     try {
     //         // Initialize your model and MPC controller.
     //         VehicleModel model("config.json");
-    //         NonlinearMPC mpc(model);
-
+    //         int N = 10;
+    //         NonlinearMPC mpc(model, N = N);
+            
     //         // Initial state x0 and reference trajectory x_ref (as DM)
     //         DM x0 = DM::zeros(12);
-    //         DM x_ref = DM::repmat(DM::vertcat({10.8, 9.9, -6, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, 11);
+    //         DM x_ref = DM::repmat(DM::vertcat({10.8, 9.9, -6, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, N+1);
 
     //         // // Set up ZeroMQ context and a REQ socket to communicate with Python.
     //         // zmq::context_t context(1);

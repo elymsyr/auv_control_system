@@ -38,9 +38,9 @@ DM generate_X_current() {
     const double nu_data_max = 5.0;
     DM eta = DM::vertcat({
         0.0, 0.0, 0.0,
-        rand_near_zero(M_PI/2),        // phi (roll)
-        rand_near_zero(M_PI/2),        // theta (pitch)
-        rand_uniform(-M_PI, M_PI)      // psi (yaw)
+        rand_near_zero(M_PI/4),        // Reduced from M_PI/2 to ±45°
+        rand_near_zero(M_PI/4),        // Same for pitch
+        rand_uniform(-M_PI, M_PI)      // Yaw remains full range
     });
 
     // Generate nu (linear and angular velocities)
@@ -62,10 +62,10 @@ DM generate_X_desired() {
     const double nu_data_min = -0.0;   // Adjust based on your AUV specs
     const double nu_data_max = 0.0;
     DM eta_d = DM::vertcat({
-        rand_uniform(-10.0, 10.0),  // nu_x
-        rand_uniform(-10.0, 10.0),  // nu_y
-        rand_uniform(-10.0, 10.0),  // nu_z
-        0.0, 0.0,
+        rand_uniform(-5.0, 5.0),  // Reduced position range
+        rand_uniform(-5.0, 5.0),
+        rand_uniform(-5.0, 5.0),
+        0.0, 0.0,                 // Zero roll/pitch for desired
         rand_uniform(-M_PI, M_PI)
     });
 
@@ -254,13 +254,15 @@ int main() {
         
         // Initialize vehicle model and MPC
         VehicleModel model("config.json");
-        NonlinearMPC mpc(model);
+        int N = 20;
+        NonlinearMPC mpc(model, N = N);
 
         // Main data collection loop
         for (int test = 0; test < 10000 && !shutdown_requested; ++test) { // 35000
             DM x_desired = generate_X_desired();
-            DM x_ref = DM::repmat(x_desired, 1, 11);
+            DM x_ref = DM::repmat(x_desired, 1, N+1);
             DM x0 = generate_X_current();
+            mpc.reset_previous_solution();
             std::cout << "State X: " << x0 << "\nState Y: " << x_desired << "\n";
             for (int step = 0; step < 30 && !shutdown_requested; ++step) {
                 auto [u_opt, x_opt] = mpc.solve(x0, x_ref);
