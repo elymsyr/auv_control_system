@@ -303,16 +303,21 @@ class NonlinearMPC {
             opti_.set_value(x0_param_, x0);
             opti_.set_value(x_ref_param_, x_ref);
             
+            // Improved warm-start initialization
             if (prev_sol_.has_value()) {
                 DM prev_X = prev_sol_->value(X_);
                 DM prev_U = prev_sol_->value(U_);
                 
-                // Create sparse shift operation
-                DM X_guess = horzcat(prev_X(Slice(), Slice(1, N_+1)), 
-                                    prev_X(Slice(), N_));
-                DM U_guess = horzcat(prev_U(Slice(), Slice(1, N_)), 
-                                    prev_U(Slice(), N_-1));
+                // Linear interpolation between previous solution and reference
+                DM X_guess = prev_X + 0.1*(x_ref - prev_X);
+                DM U_guess = prev_U;
                 
+                opti_.set_initial(X_, X_guess);
+                opti_.set_initial(U_, U_guess);
+            }
+            else {
+                DM X_guess = DM::repmat(x0, 1, N_+1) + 0.01*DM::rand(nx_, N_+1);
+                DM U_guess = 0.01*DM::rand(nu_, N_);
                 opti_.set_initial(X_, X_guess);
                 opti_.set_initial(U_, U_guess);
             }
@@ -324,9 +329,12 @@ class NonlinearMPC {
             } catch (std::exception& e) {
                 std::cerr << "Solver error: " << e.what() << "\n";
                 if (prev_sol_.has_value()) {
-                    return {prev_sol_->value(U_)(Slice(), 0), prev_sol_->value(X_)};
+                    // Use previous solution with damped update
+                    DM fallback_U = 0.5*prev_sol_->value(U_) + 0.5*DM::zeros(nu_, N_);
+                    DM fallback_X = 0.5*prev_sol_->value(X_) + 0.5*DM::repmat(x0, 1, N_+1);
+                    return {fallback_U(Slice(), 0), fallback_X};
                 }
-                return {DM::zeros(nu_), DM::zeros(nx_, N_+1)};
+                return {DM::zeros(nu_), DM::repmat(x0, 1, N_+1)};
             }
         }
         
@@ -382,9 +390,9 @@ class NonlinearMPC {
             }
             dynamics_func = external("dynamics_func", "./libdynamics_func2.so", external_options);
 
-            MX Q = MX::diag(MX::vertcat({1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+            MX Q = MX::diag(MX::vertcat({10.0, 10.0, 10.0, 1.0, 1.0, 1.0,
                                          0.1, 0.1, 0.1, 0.1, 0.1, 0.1}));
-            MX R = MX::diag(MX(std::vector<double>(8, 0.01)));
+            MX R = MX::diag(MX(std::vector<double>(8, 0.1)));
 
             MX cost = 0;
             for (int k = 0; k <= N_; ++k) {
@@ -433,11 +441,11 @@ class NonlinearMPC {
                 {"ipopt.print_level", 0},
                 {"print_time", 0},
                 {"ipopt.sb", "yes"},
-                {"ipopt.max_iter", 1000},
-                {"ipopt.tol", 1e-5},
+                {"ipopt.max_iter", 1000},  // Increased from 400
+                {"ipopt.tol", 1e-4},       // Loosened from 1e-5
                 {"ipopt.linear_solver", "mumps"},
                 {"ipopt.mu_init", 1e-2},
-                {"ipopt.acceptable_tol", 1e-5},
+                {"ipopt.acceptable_tol", 1e-4},  // Loosened from 1e-5
                 {"ipopt.hessian_approximation", "limited-memory"},
                 {"ipopt.nlp_scaling_method", "gradient-based"}
             };

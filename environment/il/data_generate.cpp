@@ -34,13 +34,13 @@ double rand_near_zero(double abs_max) {
 // --- Generate X_current (eta=0, nu/nu_dot randomized) ---
 DM generate_X_current() {
     // Parameters for randomization
-    const double nu_data_min = -2.5;   // Adjust based on your AUV specs
-    const double nu_data_max = 2.5;
+    const double nu_data_min = -5.0;   // Adjust based on your AUV specs
+    const double nu_data_max = 5.0;
     DM eta = DM::vertcat({
-        0,0,0,
+        0.0, 0.0, 0.0,
         rand_near_zero(M_PI/2),        // phi (roll)
-        rand_near_zero(M_PI/30),        // theta (pitch)
-        rand_uniform(-M_PI/2, M_PI/2)      // psi (yaw)
+        rand_near_zero(M_PI/2),        // theta (pitch)
+        rand_uniform(-M_PI, M_PI)      // psi (yaw)
     });
 
     // Generate nu (linear and angular velocities)
@@ -48,9 +48,9 @@ DM generate_X_current() {
         rand_uniform(nu_data_min, nu_data_max),  // nu_x
         rand_uniform(nu_data_min, nu_data_max),  // nu_y
         rand_uniform(nu_data_min, nu_data_max),  // nu_z
-        rand_near_zero(0.05),                    // nu_mx (close to 0)
-        rand_near_zero(0.05),                    // nu_my (close to 0)
-        rand_uniform(-0.1, 0.1)                  // nu_mz
+        rand_near_zero(0.02),                    // nu_mx (close to 0)
+        rand_near_zero(0.02),                    // nu_my (close to 0)
+        rand_uniform(-0.05, 0.05)                  // nu_mz
     });
 
     return DM::vertcat({eta, nu});
@@ -59,24 +59,21 @@ DM generate_X_current() {
 // --- Generate X_desired (nu/nu_dot mxmy=0) ---
 DM generate_X_desired() {
     // Desired eta (randomized within operational range)
-    const double nu_data_min = -5.0;   // Adjust based on your AUV specs
-    const double nu_data_max = 5.0;
+    const double nu_data_min = -0.0;   // Adjust based on your AUV specs
+    const double nu_data_max = 0.0;
     DM eta_d = DM::vertcat({
         rand_uniform(-10.0, 10.0),  // nu_x
         rand_uniform(-10.0, 10.0),  // nu_y
         rand_uniform(-10.0, 10.0),  // nu_z
-        0,0,
-        rand_uniform(-M_PI/2, M_PI/2)
+        0.0, 0.0,
+        rand_uniform(-M_PI, M_PI)
     });
 
     // Desired nu (mx/my = 0)
     DM nu_d = DM::vertcat({
         rand_uniform(nu_data_min, nu_data_max),  // nu_x
         rand_uniform(nu_data_min, nu_data_max),  // nu_y
-        rand_uniform(nu_data_min, nu_data_max),  // nu_z
-        0.0,                      // nu_mx
-        0.0,                      // nu_my
-        rand_uniform(-1.0, 1.0)   // nu_mz
+        0.0, 0.0, 0.0, 0.0
     });
 
     return DM::vertcat({eta_d, nu_d});
@@ -194,13 +191,13 @@ void initialize_hdf5() {
         // Check if file exists
         bool file_exists = false;
         struct stat buffer;
-        if (stat("mpc_data.h5", &buffer) == 0) {
+        if (stat("mpc_data2.h5", &buffer) == 0) {
             file_exists = true;
         }
 
         // Open file in append mode if exists
         if(file_exists) {
-            file = new H5File("mpc_data.h5", H5F_ACC_RDWR);
+            file = new H5File("mpc_data2.h5", H5F_ACC_RDWR);
             
             // Open existing datasets
             ds_xcurr = new DataSet(file->openDataSet("x_current"));
@@ -214,7 +211,7 @@ void initialize_hdf5() {
             std::cout << "Current size: " << current_size[0] << "\n";
         } 
         else {
-            file = new H5File("mpc_data.h5", H5F_ACC_TRUNC);
+            file = new H5File("mpc_data2.h5", H5F_ACC_TRUNC);
             
             // Create dataspace with initial size (0,12) and max size (unlimited,12)
             hsize_t init_dims[2] = {0, 12};
@@ -260,12 +257,12 @@ int main() {
         NonlinearMPC mpc(model);
 
         // Main data collection loop
-        for (int test = 0; test < 100000 && !shutdown_requested; ++test) {
+        for (int test = 0; test < 10000 && !shutdown_requested; ++test) { // 35000
             DM x_desired = generate_X_desired();
             DM x_ref = DM::repmat(x_desired, 1, 11);
             DM x0 = generate_X_current();
-
-            for (int step = 0; step < 10 && !shutdown_requested; ++step) {
+            std::cout << "State X: " << x0 << "\nState Y: " << x_desired << "\n";
+            for (int step = 0; step < 30 && !shutdown_requested; ++step) {
                 auto [u_opt, x_opt] = mpc.solve(x0, x_ref);
                 DM x_next = x_opt(Slice(), 1);
 
@@ -282,7 +279,7 @@ int main() {
 
                 x0 = x_next;
             }
-            std::cout << "Remaining Steps: " << 100000 - test << "\n";
+            std::cout << "Remaining Steps: " << 10000 - test << "\n"; // 35000
         }
 
         // Write remaining data

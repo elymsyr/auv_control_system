@@ -1,10 +1,10 @@
 <details>
 <summary><b><u><font size="5">Plans 0</font></u></b></summary>
 
-- [ ] Explicit MPC
-- [ ] ZeroMQ 
-- [ ] ROS-like communication -> https://medium.com/@connecttosaurabh.verma/building-a-robust-publish-subscribe-mechanism-in-c-6735a7055eef
-- [ ] Better communication with ground unit
+- [x] Explicit MPC
+- [x] ZeroMQ 
+- [x] ROS-like communication -> https://medium.com/@connecttosaurabh.verma/building-a-robust-publish-subscribe-mechanism-in-c-6735a7055eef
+- [x] Better communication with ground unit
 
 </details>
 
