@@ -16,6 +16,7 @@ double const NU_MAX = 5.0;
 double const D_LOC_MAX = 5.0;
 double const DEPTH_MIN = 2.0;
 double const DEPTH_MAX = 25.0;
+double const D_DIFF_MAX = 4.0;
 double const STEP = 0.1;
 std::string const HDF_PATH = "mpc_data.h5";
 
@@ -38,10 +39,10 @@ double rand_uniform(double min, double max) {
     return val;
 }
 
-double rand_uniform_step(double min, double max, double step = 0.25, bool negate = true) {
-    int n_steps = static_cast<int>((max - min) / step + step);
+double rand_uniform_step(double min, double max, bool negate = true) {
+    int n_steps = static_cast<int>((max - min) / STEP + STEP);
     int idx = std::uniform_int_distribution<int>(0, n_steps)(gen);
-    double val = min + idx * step;
+    double val = min + idx * STEP;
     if (negate && std::uniform_int_distribution<int>(0, 1)(gen)) {
         val = -val;
     }
@@ -54,9 +55,9 @@ double rand_near(double abs_max) {
 
 DM generate_X_current() {
     DM eta = DM::vertcat({
-        0.0, 0.0, rand_uniform_step(DEPTH_MIN, DEPTH_MAX, STEP, false),
-        rand_near(M_PI/5),
-        rand_near(M_PI/5),
+        0.0, 0.0, rand_uniform_step(DEPTH_MIN, DEPTH_MAX, false),
+        rand_near(M_PI/4),
+        rand_near(M_PI/4),
         rand_uniform(-M_PI, M_PI)
     });
 
@@ -66,21 +67,29 @@ DM generate_X_current() {
         rand_uniform(NU_MIN, NU_MAX),
         rand_near(0.05),
         rand_near(0.05),
-        rand_uniform(-0.09, 0.09)
+        rand_uniform(-0.1, 0.1)
     });
 
     return DM::vertcat({eta, nu});
 }
 
-DM generate_X_desired() {
+double random_depth(double d_loc_min = 0.0) {
+    if (std::uniform_int_distribution<int>(0, 1)(gen)) {
+        return d_loc_min + rand_uniform_step(d_loc_min, d_loc_min+D_DIFF_MAX, false);
+    }
+    else {
+        return d_loc_min + rand_uniform_step(d_loc_min-D_DIFF_MAX, d_loc_min, false);
+    }
+}
+
+DM generate_X_desired(double d_loc_min = 0.0) {
     DM eta_d = DM::vertcat({
         rand_uniform_step(0.0, D_LOC_MAX),
         rand_uniform_step(0.0, D_LOC_MAX),
-        rand_uniform_step(DEPTH_MIN, DEPTH_MAX, STEP, false),
+        random_depth(d_loc_min),
         0.0, 0.0,
         rand_uniform(-M_PI, M_PI)
     });
-
 
     DM nu_d = DM::vertcat({
         rand_uniform(NU_MIN, NU_MAX),
@@ -271,12 +280,13 @@ int main() {
 
         // Main data collection loop
         for (int test = 0; test < 100000 && !shutdown_requested; ++test) { // 35000
-            DM x_desired = generate_X_desired();
-            DM x_ref = DM::repmat(x_desired, 1, N+1);
             DM x0 = generate_X_current();
+            double depth = static_cast<double>(x0(2));
+            DM x_desired = generate_X_desired(depth);
+            DM x_ref = DM::repmat(x_desired, 1, N+1);
             mpc.reset_previous_solution();
             std::cout << "State X: " << x0 << "\nState Y: " << x_desired << "\n";
-            for (int step = 0; step < 30 && !shutdown_requested; ++step) {
+            for (int step = 0; step < 50 && !shutdown_requested; ++step) {
                 auto [u_opt, x_opt] = mpc.solve(x0, x_ref);
                 DM x_next = x_opt(Slice(), 1);
 

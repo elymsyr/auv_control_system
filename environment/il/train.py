@@ -93,7 +93,6 @@ NU_MAX: float  = 5.0
 D_LOC_MAX: float  = 5.0
 DEPTH_MIN: float  = 2.0
 DEPTH_MAX: float  = 25.0
-STEP: float  = 0.25
 ZERO: float = 1.0
 
 # Example scaling configuration
