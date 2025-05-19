@@ -90,7 +90,7 @@ class FeatureNormalizer:
 
 NU_MIN: float  = 0.0
 NU_MAX: float  = 5.0
-D_LOC_MAX: float  = 10.0
+D_LOC_MAX: float  = 5.0
 DEPTH_MIN: float  = 2.0
 DEPTH_MAX: float  = 25.0
 STEP: float  = 0.25

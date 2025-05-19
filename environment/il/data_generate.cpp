@@ -13,7 +13,7 @@ using namespace H5;
 
 double const NU_MIN = 0.0;
 double const NU_MAX = 5.0;
-double const D_LOC_MAX = 10.0;
+double const D_LOC_MAX = 5.0;
 double const DEPTH_MIN = 2.0;
 double const DEPTH_MAX = 25.0;
 double const STEP = 0.1;
