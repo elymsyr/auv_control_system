@@ -443,7 +443,7 @@ class NonlinearMPC {
                 {"ipopt.print_level", 0},
                 {"print_time", 0},
                 {"ipopt.sb", "yes"},
-                {"ipopt.max_iter", 2000},  // Increased from 400
+                {"ipopt.max_iter", 1000},  // Increased from 400
                 {"ipopt.tol", 1e-4},       // Loosened from 1e-5
                 {"ipopt.linear_solver", "mumps"},
                 {"ipopt.mu_init", 1e-2},

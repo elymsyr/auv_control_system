@@ -55,8 +55,8 @@ double rand_near(double abs_max) {
 DM generate_X_current() {
     DM eta = DM::vertcat({
         0.0, 0.0, rand_uniform_step(DEPTH_MIN, DEPTH_MAX, STEP, false),
-        rand_near(M_PI/4),
-        rand_near(M_PI/4),
+        rand_near(M_PI/5),
+        rand_near(M_PI/5),
         rand_uniform(-M_PI, M_PI)
     });
 
@@ -66,7 +66,7 @@ DM generate_X_current() {
         rand_uniform(NU_MIN, NU_MAX),
         rand_near(0.05),
         rand_near(0.05),
-        rand_uniform(-0.1, 0.1)
+        rand_uniform(-0.09, 0.09)
     });
 
     return DM::vertcat({eta, nu});
@@ -270,7 +270,7 @@ int main() {
         NonlinearMPC mpc(model, N = N);
 
         // Main data collection loop
-        for (int test = 0; test < 10000 && !shutdown_requested; ++test) { // 35000
+        for (int test = 0; test < 100000 && !shutdown_requested; ++test) { // 35000
             DM x_desired = generate_X_desired();
             DM x_ref = DM::repmat(x_desired, 1, N+1);
             DM x0 = generate_X_current();
