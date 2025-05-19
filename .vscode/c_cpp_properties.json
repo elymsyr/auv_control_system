@@ -10,7 +10,8 @@
                 "/usr/include",
                 "/usr/local/include",
                 "${CONDA_PREFIX}/include",
-                "/home/eren/miniconda3/envs/mppi/include"
+                "/home/eren/miniconda3/envs/mppi/include",
+                "/home/eren/miniconda3/envs/mppi/include/opencv4"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang-18",

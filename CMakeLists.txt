@@ -4,6 +4,8 @@ project(control_system LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(OpenCV_INCLUDE_DIRS "/home/eren/miniconda3/envs/mppi/include/opencv4")
+set(OpenCV_LIBRARIES "/home/eren/miniconda3/envs/mppi/lib")
 
 find_package(PkgConfig)
 pkg_check_modules(PC_ZeroMQ QUIET zmq)
@@ -30,6 +32,7 @@ find_package(ZLIB REQUIRED)
 include_directories(control_system PRIVATE
     include
     ${CASADI_INCLUDE_DIR}
+    ${OpenCV_INCLUDE_DIRS}
     ${ZeroMQ_INCLUDE_DIR}
     ${Boost_INCLUDE_DIRS}
     ${OPENSSL_INCLUDE_DIR}
@@ -48,6 +51,7 @@ add_executable(control_system
 target_link_libraries(control_system PRIVATE
     ${CASADI_LIBRARIES}
     ${ZeroMQ_LIBRARY}
+    ${OpenCV_LIBRARIES}
     Boost::system
     OpenSSL::SSL
     OpenSSL::Crypto

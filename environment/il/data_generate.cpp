@@ -7,72 +7,84 @@
 #include <csignal>
 #include <atomic>
 #include <sys/stat.h>
+
 using namespace casadi;
 using namespace H5;
 
+double const NU_MIN = 0.0;
+double const NU_MAX = 5.0;
+double const D_LOC_MAX = 10.0;
+double const DEPTH_MIN = 2.0;
+double const DEPTH_MAX = 25.0;
+double const STEP = 0.1;
+std::string const HDF_PATH = "mpc_data.h5";
+
 std::atomic<bool> shutdown_requested(false);
-// --- Signal handler ---
+
 void sigint_handler(int) {
     std::cout << "\nShutdown requested, finishing current work...\n";
     shutdown_requested = true;
 }
 
-// --- Global random number generator ---
 std::random_device rd;
 std::mt19937 gen(rd());
 
-// --- Helper functions for random numbers ---
 double rand_uniform(double min, double max) {
     std::uniform_real_distribution<double> dist(min, max);
-    return dist(gen);
+    double val = dist(gen);
+    if (std::uniform_int_distribution<int>(0, 1)(gen)) {
+        val = -val;
+    }
+    return val;
 }
 
-double rand_near_zero(double abs_max) {
+double rand_uniform_step(double min, double max, double step = 0.25, bool negate = true) {
+    int n_steps = static_cast<int>((max - min) / step + step);
+    int idx = std::uniform_int_distribution<int>(0, n_steps)(gen);
+    double val = min + idx * step;
+    if (negate && std::uniform_int_distribution<int>(0, 1)(gen)) {
+        val = -val;
+    }
+    return val;
+}
+
+double rand_near(double abs_max) {
     return rand_uniform(-abs_max, abs_max);
 }
 
-// --- Generate X_current (eta=0, nu/nu_dot randomized) ---
 DM generate_X_current() {
-    // Parameters for randomization
-    const double nu_data_min = -5.0;   // Adjust based on your AUV specs
-    const double nu_data_max = 5.0;
     DM eta = DM::vertcat({
-        0.0, 0.0, 0.0,
-        rand_near_zero(M_PI/4),        // Reduced from M_PI/2 to ±45°
-        rand_near_zero(M_PI/4),        // Same for pitch
-        rand_uniform(-M_PI, M_PI)      // Yaw remains full range
+        0.0, 0.0, rand_uniform_step(DEPTH_MIN, DEPTH_MAX, STEP, false),
+        rand_near(M_PI/4),
+        rand_near(M_PI/4),
+        rand_uniform(-M_PI, M_PI)
     });
 
-    // Generate nu (linear and angular velocities)
     DM nu = DM::vertcat({
-        rand_uniform(nu_data_min, nu_data_max),  // nu_x
-        rand_uniform(nu_data_min, nu_data_max),  // nu_y
-        rand_uniform(nu_data_min, nu_data_max),  // nu_z
-        rand_near_zero(0.02),                    // nu_mx (close to 0)
-        rand_near_zero(0.02),                    // nu_my (close to 0)
-        rand_uniform(-0.05, 0.05)                  // nu_mz
+        rand_uniform(NU_MIN, NU_MAX),
+        rand_uniform(NU_MIN, NU_MAX),
+        rand_uniform(NU_MIN, NU_MAX),
+        rand_near(0.5),
+        rand_near(0.5),
+        rand_uniform(-0.1, 0.1)
     });
 
     return DM::vertcat({eta, nu});
 }
 
-// --- Generate X_desired (nu/nu_dot mxmy=0) ---
 DM generate_X_desired() {
-    // Desired eta (randomized within operational range)
-    const double nu_data_min = -0.0;   // Adjust based on your AUV specs
-    const double nu_data_max = 0.0;
     DM eta_d = DM::vertcat({
-        rand_uniform(-5.0, 5.0),  // Reduced position range
-        rand_uniform(-5.0, 5.0),
-        rand_uniform(-5.0, 5.0),
-        0.0, 0.0,                 // Zero roll/pitch for desired
+        rand_uniform_step(0.0, D_LOC_MAX),
+        rand_uniform_step(0.0, D_LOC_MAX),
+        rand_uniform_step(DEPTH_MIN, DEPTH_MAX, STEP, false),
+        0.0, 0.0,
         rand_uniform(-M_PI, M_PI)
     });
 
-    // Desired nu (mx/my = 0)
+
     DM nu_d = DM::vertcat({
-        rand_uniform(nu_data_min, nu_data_max),  // nu_x
-        rand_uniform(nu_data_min, nu_data_max),  // nu_y
+        rand_uniform(NU_MIN, NU_MAX),
+        rand_uniform(NU_MIN, NU_MAX),
         0.0, 0.0, 0.0, 0.0
     });
 
@@ -191,13 +203,13 @@ void initialize_hdf5() {
         // Check if file exists
         bool file_exists = false;
         struct stat buffer;
-        if (stat("mpc_data2.h5", &buffer) == 0) {
+        if (stat(HDF_PATH.c_str(), &buffer) == 0) {
             file_exists = true;
         }
 
         // Open file in append mode if exists
         if(file_exists) {
-            file = new H5File("mpc_data2.h5", H5F_ACC_RDWR);
+            file = new H5File(HDF_PATH, H5F_ACC_RDWR);
             
             // Open existing datasets
             ds_xcurr = new DataSet(file->openDataSet("x_current"));
@@ -211,7 +223,7 @@ void initialize_hdf5() {
             std::cout << "Current size: " << current_size[0] << "\n";
         } 
         else {
-            file = new H5File("mpc_data2.h5", H5F_ACC_TRUNC);
+            file = new H5File(HDF_PATH, H5F_ACC_TRUNC);
             
             // Create dataspace with initial size (0,12) and max size (unlimited,12)
             hsize_t init_dims[2] = {0, 12};
@@ -283,23 +295,12 @@ int main() {
             }
             std::cout << "Remaining Steps: " << 10000 - test << "\n"; // 35000
         }
-
-        // Write remaining data
         write_chunk();
-
-        // Cleanup
-        delete ds_xnext;
-        delete ds_uopt;
-        delete ds_xdes;
-        delete ds_xcurr;
-        delete file;
         cleanup_hdf5();
-
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
         cleanup_hdf5();
         return 1;
     }
-    cleanup_hdf5();
     return 0;
 }
