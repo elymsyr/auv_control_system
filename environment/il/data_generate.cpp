@@ -16,7 +16,7 @@ double const NU_MAX = 5.0;
 double const D_LOC_MAX = 5.0;
 double const DEPTH_MIN = 2.0;
 double const DEPTH_MAX = 25.0;
-double const D_DIFF_MAX = 4.0;
+double const D_DIFF_MAX = 5.0;
 double const STEP = 0.1;
 std::string const HDF_PATH = "mpc_data.h5";
 
@@ -40,7 +40,7 @@ double rand_uniform(double min, double max) {
 }
 
 double rand_uniform_step(double min, double max, bool negate = true) {
-    int n_steps = static_cast<int>((max - min) / STEP + STEP);
+    int n_steps = static_cast<int>((max - min) / STEP);
     int idx = std::uniform_int_distribution<int>(0, n_steps)(gen);
     double val = min + idx * STEP;
     if (negate && std::uniform_int_distribution<int>(0, 1)(gen)) {
@@ -74,12 +74,11 @@ DM generate_X_current() {
 }
 
 double random_depth(double d_loc_min = 0.0) {
-    if (std::uniform_int_distribution<int>(0, 1)(gen)) {
-        return d_loc_min + rand_uniform_step(d_loc_min, d_loc_min+D_DIFF_MAX, false);
-    }
-    else {
-        return d_loc_min + rand_uniform_step(d_loc_min-D_DIFF_MAX, d_loc_min, false);
-    }
+    double diff = rand_uniform_step(0.0, D_DIFF_MAX);
+    double val = d_loc_min + diff;
+    if (val > DEPTH_MAX) val = DEPTH_MAX;
+    if (val < DEPTH_MIN) val = DEPTH_MIN;
+    return val;
 }
 
 DM generate_X_desired(double d_loc_min = 0.0) {
