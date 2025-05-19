@@ -102,7 +102,7 @@ X_SCALE_FACTORS = [
     ZERO, ZERO, DEPTH_MAX,
     np.pi/4, np.pi/4, np.pi,
     NU_MAX, NU_MAX, NU_MAX,
-    0.5, 0.5, 0.1,
+    0.05, 0.05, 0.1,
     # Desired state features
     D_LOC_MAX, D_LOC_MAX, DEPTH_MAX,
     ZERO, ZERO, np.pi,
