@@ -64,8 +64,8 @@ DM generate_X_current() {
         rand_uniform(NU_MIN, NU_MAX),
         rand_uniform(NU_MIN, NU_MAX),
         rand_uniform(NU_MIN, NU_MAX),
-        rand_near(0.5),
-        rand_near(0.5),
+        rand_near(0.05),
+        rand_near(0.05),
         rand_uniform(-0.1, 0.1)
     });
 
