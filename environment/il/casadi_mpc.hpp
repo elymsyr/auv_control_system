@@ -14,8 +14,6 @@
 
 using namespace casadi;
 using json = nlohmann::json;
-
-
 class VehicleModel {
 public:
     explicit VehicleModel(const std::string& config_path) {
