@@ -86,5 +86,6 @@
         "future": "cpp",
         "cerrno": "cpp",
         "*.ipp": "cpp"
-    }
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

@@ -11,7 +11,8 @@
                 "/usr/local/include",
                 "${CONDA_PREFIX}/include",
                 "/home/eren/miniconda3/envs/mppi/include",
-                "/home/eren/miniconda3/envs/mppi/include/opencv4"
+                "/home/eren/miniconda3/envs/mppi/include/opencv4",
+                "/usr/local/cuda-12.4/include"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang-18",
