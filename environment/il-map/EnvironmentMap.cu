@@ -1,4 +1,4 @@
-#include "EnvironmentMap.cuh"
+#include "EnvironmentMap.h"
 #include <cuda_runtime.h>
 #include <cstdint>
 
@@ -46,7 +46,7 @@ __device__ void EnvironmentMap::iterate(float dx, float dy) {
     y_ -= sy_ * 25.0f;
 }
 
-__device__ void EnvironmentMap::slideGrid(int sx_, int sy_) {
+__device__ void EnvironmentMap::slideGrid() {
     int tx = blockIdx.x * blockDim.x + threadIdx.x;
     int ty = blockIdx.y * blockDim.y + threadIdx.y;
     if (tx >= width || ty >= height) return;

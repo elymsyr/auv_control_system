@@ -1,6 +1,8 @@
 // EnvironmentMapWrapper.cu
 #include "EnvironmentMap.h"
-#include "EnvironmentMap.cuh"
+#include <fstream>      // Add for file operations
+#include <cstdint>      // Add for uint8_t
+#include <vector_types.h>  // Add for int2
 
 void save_grid_to_file(void* map, const char* filename) {
     EnvironmentMap* d_map = static_cast<EnvironmentMap*>(map);
@@ -49,15 +51,19 @@ void destroy_point_batch(void* batch) {
     cudaFree(d_batch);
 }
 
-void launch_slide_kernel(void* map, int shiftX, int shiftY) {
+void launch_slide_kernel(void* map, float dx, float dy) {
+    auto start = std::chrono::high_resolution_clock::now();
     EnvironmentMap* d_map = static_cast<EnvironmentMap*>(map);
     dim3 threads(16, 16);
     dim3 blocks(
         (d_map->width + threads.x - 1) / threads.x,
         (d_map->height + threads.y - 1) / threads.y
     );
-    slideGridKernel<<<blocks, threads>>>(d_map, shiftX, shiftY);
+    iterateMovementKernel<<<blocks, threads>>>(d_map, dx, dy);
     cudaDeviceSynchronize();
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::cout << "Slide kernel: " << duration.count() << "μs\n";
 }
 
 void launch_update_kernel(void* map, void* batch) {

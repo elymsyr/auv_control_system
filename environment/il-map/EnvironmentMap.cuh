@@ -25,7 +25,7 @@ public:
     __host__ void cleanup();
     __device__ void iterate(float dx, float dy);
     __host__ void applyBatchUpdate(const PointBatch& batch);
-    __device__ void slideGrid(int shiftX, int shiftY);
+    __device__ void slideGrid();
     __device__ void iterate(float a, float b, float c, float d);
     __device__ void setPoint(int x, int y, uint8_t value);
 };

@@ -1,15 +1,15 @@
-// main.cpp
 #include "EnvironmentMap.h"
 #include <iostream>
+#include <cstdint>
+#include <cuda_runtime.h>
 
 void initialize_test_pattern(void* map) {
-    // Set center pixel to max value
-    launch_slide_kernel(map, 0, 0); // Ensure no shift
+    launch_slide_kernel(map, 0, 0);
     void* batch = create_point_batch(1);
     
-    // Create single-point batch
+    // Corrected: Remove 'struct' keyword
     PointBatch* h_batch = static_cast<PointBatch*>(batch);
-    int2 center = {64, 64}; // For 129x129 grid
+    int2 center = make_int2(64, 64);
     uint8_t value = 255;
     
     cudaMemcpy(h_batch->coords_dev, &center, sizeof(int2), cudaMemcpyHostToDevice);
@@ -20,16 +20,22 @@ void initialize_test_pattern(void* map) {
 }
 
 int main() {
-    void* map = create_environment_map(129, 129);
+    const int W = 129, H = 129;
     
-    // Test 1: Single point
+    // 1. Create and initialize map
+    void* map = create_environment_map(W, H);
+    
+    // 2. Create test pattern
     initialize_test_pattern(map);
-    save_grid_to_file(map, "test1_initial.bin");
+    save_grid_to_file(map, "test_initial.bin");
     
-    // Test 2: Shift right
-    launch_slide_kernel(map, 1, 0);
-    save_grid_to_file(map, "test1_shifted.bin");
+    // 3. Apply shift
+    const int shiftX = 5, shiftY = 3;
+    launch_slide_kernel(map, shiftX, shiftY);
+    save_grid_to_file(map, "test_shifted.bin");
     
+    // 4. Cleanup
     destroy_environment_map(map);
+    
     return 0;
 }
