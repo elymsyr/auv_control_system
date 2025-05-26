@@ -59,7 +59,7 @@ void launch_slide_kernel(void* map, float dx, float dy) {
         (d_map->width + threads.x - 1) / threads.x,
         (d_map->height + threads.y - 1) / threads.y
     );
-    iterateMovementKernel<<<blocks, threads>>>(d_map, dx, dy);
+    iterateKernel<<<blocks, threads>>>(d_map, dx, dy);
     cudaDeviceSynchronize();
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -71,6 +71,6 @@ void launch_update_kernel(void* map, void* batch) {
     PointBatch* d_batch = static_cast<PointBatch*>(batch);
     const int blockSize = 256;
     const int gridSize = (d_batch->count + blockSize - 1) / blockSize;
-    ultraFastUpdateKernel<<<gridSize, blockSize>>>(d_map, *d_batch);
+    pointUpdateKernel<<<gridSize, blockSize>>>(d_map, *d_batch);
     cudaDeviceSynchronize();
 }

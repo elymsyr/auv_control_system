@@ -30,8 +30,8 @@ int main() {
     save_grid_to_file(map, "test_initial.bin");
     
     // 3. Apply shift
-    const int shiftX = 5, shiftY = 3;
-    launch_slide_kernel(map, shiftX, shiftY);
+    const float dx = 56.0f, dy = 30.5f;
+    launch_slide_kernel(map, dx, dy);
     save_grid_to_file(map, "test_shifted.bin");
     
     // 4. Cleanup

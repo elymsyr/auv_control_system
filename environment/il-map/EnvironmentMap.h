@@ -46,14 +46,13 @@ public:
     __device__ void iterate(float dx, float dy);
     __host__ void applyBatchUpdate(const PointBatch& batch);
     __device__ void slideGrid();
-    __device__ void iterate(float a, float b, float c, float d);
     __device__ void setPoint(int x, int y, uint8_t value);
 };
 
 // Kernel declarations
-__global__ void iterateMovementKernel(EnvironmentMap* map, float dx, float dy);
+__global__ void iterateKernel(EnvironmentMap* map, float dx, float dy);
 __global__ void slideGridKernel(EnvironmentMap* map, int shiftX, int shiftY);
 __global__ void setPointKernel(EnvironmentMap* map, int x, int y, uint8_t value);
-__global__ void ultraFastUpdateKernel(EnvironmentMap* map, const PointBatch batch);
+__global__ void pointUpdateKernel(EnvironmentMap* map, const PointBatch batch);
 
 #endif // ENVIRONMENT_MAP_H

@@ -30,9 +30,9 @@ public:
     __device__ void setPoint(int x, int y, uint8_t value);
 };
 
-__global__ void iterateMovementKernel(EnvironmentMap* map, float dx, float dy);
+__global__ void iterateKernel(EnvironmentMap* map, float dx, float dy);
 __global__ void slideGridKernel(EnvironmentMap* map, int shiftX, int shiftY);
 __global__ void setPointKernel(EnvironmentMap* map, int x, int y, uint8_t value);
-__global__ void ultraFastUpdateKernel(EnvironmentMap* map, const PointBatch batch);
+__global__ void pointUpdateKernel(EnvironmentMap* map, const PointBatch batch);
 
 #endif

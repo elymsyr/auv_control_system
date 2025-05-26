@@ -63,7 +63,7 @@ int main() {
 
     // 4. Launch optimized kernel
     const int BLOCK_SIZE = 256;
-    ultraFastUpdateKernel<<<(num_points + BLOCK_SIZE - 1)/BLOCK_SIZE, BLOCK_SIZE>>>(
+    pointUpdateKernel<<<(num_points + BLOCK_SIZE - 1)/BLOCK_SIZE, BLOCK_SIZE>>>(
         d_map, batch
     );
     CHECK_CUDA_ERROR(cudaDeviceSynchronize());
@@ -75,7 +75,7 @@ int main() {
 
     // 4. Run iterations
     for (int i = 0; i < 30; ++i) {
-        iterateMovementKernel<<<blocks, threads>>>(d_map, 12.3f, 23.0f);
+        iterateKernel<<<blocks, threads>>>(d_map, 12.3f, 23.0f);
         CHECK_CUDA_ERROR(cudaGetLastError());
         CHECK_CUDA_ERROR(cudaDeviceSynchronize());
         applySlide(d_map);

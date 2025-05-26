@@ -40,7 +40,7 @@ bool verify_shift(const char* before, const char* after, int shiftX, int shiftY)
 int main() {
     const char* before = "test_initial.bin";
     const char* after = "test_shifted.bin";
-    int shiftX = 5, shiftY = 3;
+    int shiftX = 2, shiftY = 1;
     
     bool result = verify_shift(before, after, shiftX, shiftY);
     std::cout << "Shift validation: " << (result ? "PASSED" : "FAILED") << std::endl;

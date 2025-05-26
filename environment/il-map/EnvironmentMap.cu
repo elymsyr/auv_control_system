@@ -33,7 +33,7 @@ __host__ void EnvironmentMap::applyBatchUpdate(const PointBatch& batch) {
     const int blockSize = 256;
     const int gridSize = (batch.count + blockSize - 1) / blockSize;
     
-    ultraFastUpdateKernel<<<gridSize, blockSize>>>(this, batch);
+    pointUpdateKernel<<<gridSize, blockSize>>>(this, batch);
     cudaDeviceSynchronize();
 }
 
@@ -44,6 +44,7 @@ __device__ void EnvironmentMap::iterate(float dx, float dy) {
     sy_ = static_cast<int>(y_ / 25.0f);
     x_ -= sx_ * 25.0f;
     y_ -= sy_ * 25.0f;
+    slideGrid();
 }
 
 __device__ void EnvironmentMap::slideGrid() {
@@ -76,10 +77,7 @@ __global__ void setPointKernel(EnvironmentMap* map, int x, int y, uint8_t value)
     map->setPoint(x, y, value);
 }
 
-__device__ void EnvironmentMap::iterate(float a, float b, float c, float d) {}
-
-// Kernel wrapper
-__global__ void iterateMovementKernel(EnvironmentMap* map, float dx, float dy) {
+__global__ void iterateKernel(EnvironmentMap* map, float dx, float dy) {
     map->iterate(dx, dy);
 }
 
@@ -104,7 +102,7 @@ __global__ void slideGridKernel(EnvironmentMap* map, int sx_, int sy_) {
     map->grid[dstIdx] = map->tempGrid[dstIdx];
 }
 
-__global__ void ultraFastUpdateKernel(EnvironmentMap* map, PointBatch batch) {
+__global__ void pointUpdateKernel(EnvironmentMap* map, PointBatch batch) {
     const unsigned tid = blockIdx.x * blockDim.x + threadIdx.x;
     if(tid >= batch.count) return;
     
