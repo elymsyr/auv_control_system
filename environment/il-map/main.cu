@@ -15,8 +15,24 @@ do {                                                                           \
     }                                                                          \
 } while(0)
 
+void applySlide(EnvironmentMap* map) {
+    dim3 threads(16, 16);
+    dim3 blocks(
+        (map->width + threads.x - 1) / threads.x,
+        (map->height + threads.y - 1) / threads.y
+    );
+    
+    slideGridKernel<<<blocks, threads>>>(map, map->sx_, map->sy_);
+    cudaDeviceSynchronize();
+    
+    // Reset shifts after application
+    map->sx_ = map->sy_ = 0;
+}
+
 int main() {
     const int W = 129, H = 129;
+    dim3 threads(16, 16);
+    dim3 blocks((W + threads.x-1)/threads.x, (H + threads.y-1)/threads.y);
 
     // 1. Create device-side instance using unified memory
     EnvironmentMap* d_map;
@@ -59,7 +75,10 @@ int main() {
 
     // 4. Run iterations
     for (int i = 0; i < 30; ++i) {
-        map->iterate(12.2f, 10.4f);
+        iterateMovementKernel<<<blocks, threads>>>(d_map, 12.3f, 23.0f);
+        CHECK_CUDA_ERROR(cudaGetLastError());
+        CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+        applySlide(d_map);
         CHECK_CUDA_ERROR(cudaGetLastError());
         CHECK_CUDA_ERROR(cudaDeviceSynchronize());
     }

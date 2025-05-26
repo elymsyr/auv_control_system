@@ -37,19 +37,22 @@ __host__ void EnvironmentMap::applyBatchUpdate(const PointBatch& batch) {
     cudaDeviceSynchronize();
 }
 
-__host__ void EnvironmentMap::iterate(float dx, float dy) {
-    int sx = static_cast<int>((x_ + dx) / 25);
-    int sy = static_cast<int>((y_ + dy) / 25);
-    slideGrid(sx, sy);
+__device__ void EnvironmentMap::iterate(float dx, float dy) {
+    x_ += dx;
+    y_ += dy;
+    sx_ = static_cast<int>(x_ / 25.0f);
+    sy_ = static_cast<int>(y_ / 25.0f);
+    x_ -= sx_ * 25.0f;
+    y_ -= sy_ * 25.0f;
 }
 
-__device__ void EnvironmentMap::slideGrid(int shiftX, int shiftY) {
+__device__ void EnvironmentMap::slideGrid(int sx_, int sy_) {
     int tx = blockIdx.x * blockDim.x + threadIdx.x;
     int ty = blockIdx.y * blockDim.y + threadIdx.y;
     if (tx >= width || ty >= height) return;
 
-    int srcX = tx - shiftX;
-    int srcY = ty - shiftY;
+    int srcX = tx - sx_;
+    int srcY = ty - sy_;
     int dstIdx = ty * width + tx;
 
     if (srcX >= 0 && srcX < width && srcY >= 0 && srcY < height) {
@@ -76,12 +79,29 @@ __global__ void setPointKernel(EnvironmentMap* map, int x, int y, uint8_t value)
 __device__ void EnvironmentMap::iterate(float a, float b, float c, float d) {}
 
 // Kernel wrapper
-__global__ void iterateKernel(EnvironmentMap* map, float a, float b, float c, float d) {
-    map->iterate(a, b, c, d);
+__global__ void iterateMovementKernel(EnvironmentMap* map, float dx, float dy) {
+    map->iterate(dx, dy);
 }
 
-__global__ void slideGridKernel(EnvironmentMap* map, int shiftX, int shiftY) {
-    map->slideGrid(shiftX, shiftY);
+__global__ void slideGridKernel(EnvironmentMap* map, int sx_, int sy_) {
+    int tx = blockIdx.x * blockDim.x + threadIdx.x;
+    int ty = blockIdx.y * blockDim.y + threadIdx.y;
+    if (tx >= map->width || ty >= map->height) return;
+
+    // Phase 1: Copy grid -> tempGrid with shift
+    int srcX = tx - sx_;
+    int srcY = ty - sy_;
+    int dstIdx = ty * map->width + tx;
+
+    if (srcX >= 0 && srcX < map->width && srcY >= 0 && srcY < map->height) {
+        map->tempGrid[dstIdx] = map->grid[srcY * map->width + srcX];
+    } else {
+        map->tempGrid[dstIdx] = 0;  // Use 0 for uint8_t
+    }
+
+    // Phase 2: Copy tempGrid -> grid (after all threads complete phase 1)
+    __syncthreads();  // Now safe within block
+    map->grid[dstIdx] = map->tempGrid[dstIdx];
 }
 
 __global__ void ultraFastUpdateKernel(EnvironmentMap* map, PointBatch batch) {

@@ -14,6 +14,7 @@ struct PointBatch {
 class EnvironmentMap {
 public:
     int width, height;
+    int sx_, sy_;
     float x_, y_, yaw_;
     uint8_t* grid;      // Device memory pointer
     uint8_t* tempGrid;  // Temporary buffer pointer
@@ -22,14 +23,14 @@ public:
     __host__ ~EnvironmentMap();
     __host__ void initialize(int w, int h);
     __host__ void cleanup();
-    __host__ void EnvironmentMap::iterate(float dx, float dy);
+    __device__ void iterate(float dx, float dy);
     __host__ void applyBatchUpdate(const PointBatch& batch);
     __device__ void slideGrid(int shiftX, int shiftY);
     __device__ void iterate(float a, float b, float c, float d);
     __device__ void setPoint(int x, int y, uint8_t value);
 };
 
-__global__ void iterateKernel(EnvironmentMap* map, float a, float b, float c, float d);
+__global__ void iterateMovementKernel(EnvironmentMap* map, float dx, float dy);
 __global__ void slideGridKernel(EnvironmentMap* map, int shiftX, int shiftY);
 __global__ void setPointKernel(EnvironmentMap* map, int x, int y, uint8_t value);
 __global__ void ultraFastUpdateKernel(EnvironmentMap* map, const PointBatch batch);
