@@ -1,25 +1,37 @@
-#include <cuda_runtime.h>
-#include <iostream>
+#ifndef ENVIRONMENT_MAP_CUH
+#define ENVIRONMENT_MAP_CUH
 
-// GPU-side data structure
-struct EnvironmentMap {
-    int width, height;
-    float *grid;     // Device grid
-    float *tempGrid; // Temporary grid for sliding
+#include <cstdint>
+#include <vector_types.h>
+#include <thrust/device_vector.h>  // At the top of the file
 
-    // Host constructor
-    __host__ EnvironmentMap(int w, int h);
-    // Host destructor
-    __host__ ~EnvironmentMap();
-
-    // Device method: slide the grid by (shiftX, shiftY)
-    __device__ void slideGrid(int shiftX, int shiftY);
-
-    // Device method: example computation
-    __device__ void iterate(float a, float b, float c, float d);
+struct PointBatch {
+    int count;
+    int2* coords_dev;    // Using int2 for coalesced access
+    uint8_t* values_dev;
 };
 
-// Kernel wrappers
-__global__ void iterateKernel(EnvironmentMap *map, float a, float b, float c, float d);
+class EnvironmentMap {
+public:
+    int width, height;
+    float x_, y_, yaw_;
+    uint8_t* grid;      // Device memory pointer
+    uint8_t* tempGrid;  // Temporary buffer pointer
 
-__global__ void slideGridKernel(EnvironmentMap *map, int shiftX, int shiftY);
+    __host__ EnvironmentMap(int w, int h);
+    __host__ ~EnvironmentMap();
+    __host__ void initialize(int w, int h);
+    __host__ void cleanup();
+    __host__ void EnvironmentMap::iterate(float dx, float dy);
+    __host__ void applyBatchUpdate(const PointBatch& batch);
+    __device__ void slideGrid(int shiftX, int shiftY);
+    __device__ void iterate(float a, float b, float c, float d);
+    __device__ void setPoint(int x, int y, uint8_t value);
+};
+
+__global__ void iterateKernel(EnvironmentMap* map, float a, float b, float c, float d);
+__global__ void slideGridKernel(EnvironmentMap* map, int shiftX, int shiftY);
+__global__ void setPointKernel(EnvironmentMap* map, int x, int y, uint8_t value);
+__global__ void ultraFastUpdateKernel(EnvironmentMap* map, const PointBatch batch);
+
+#endif
