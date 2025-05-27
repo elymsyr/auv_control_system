@@ -25,10 +25,10 @@ void fill_point_batch_with_random(void* batch, int grid_width, int grid_height) 
         h_coords[i].x = rand() % grid_width * 20;    // Random x ∈ [0, width-1]
         h_coords[i].y = rand() % grid_height * 20;   // Random y ∈ [0, height-1]
         h_values[i] = rand() % 256;             // Random value ∈ [0,255]
-        std::cout << "Point " << i << ": (" 
-                  << h_coords[i].x << ", " 
-                  << h_coords[i].y << ") = " 
-                  << static_cast<int>(h_values[i]) << std::endl;
+        // std::cout << "Point " << i << ": (" 
+        //           << h_coords[i].x << ", " 
+        //           << h_coords[i].y << ") = " 
+        //           << static_cast<int>(h_values[i]) << std::endl;
     }
     
     // Copy to device

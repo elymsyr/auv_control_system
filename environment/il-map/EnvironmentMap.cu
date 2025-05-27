@@ -197,7 +197,7 @@ void launch_slide_kernel(void* map, float dx, float dy) {
     cudaDeviceSynchronize();
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    std::cout << "Slide kernel: " << duration.count() << "μs\n";
+    // std::cout << "Slide kernel: " << duration.count() << "μs\n";
 }
 
 void launch_update_kernel(void* map, void* batch) {
