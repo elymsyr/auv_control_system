@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <vector_types.h>
 #include <thrust/device_vector.h>
+#include <cmath> 
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,10 +37,13 @@ public:
     int width, height;
     int sx_, sy_;
     float x_, y_, yaw_;
+    float x_r_, y_r_;
+    float x_r_cm_, y_r_cm_;
+    float round_;
     uint8_t* grid;
     uint8_t* tempGrid;
 
-    __host__ EnvironmentMap(int w, int h);
+    EnvironmentMap(int w, int h);
     __host__ ~EnvironmentMap();
     __host__ void initialize(int w, int h);
     __host__ void cleanup();

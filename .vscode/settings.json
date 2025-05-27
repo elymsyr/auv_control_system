@@ -87,7 +87,9 @@
         "cerrno": "cpp",
         "*.ipp": "cpp",
         "__config": "cpp",
-        "__nullptr": "cpp"
+        "__nullptr": "cpp",
+        "__tree": "cpp",
+        "target": "cpp"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

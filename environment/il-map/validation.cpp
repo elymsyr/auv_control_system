@@ -1,6 +1,7 @@
 #include <fstream>
 #include <iostream>
 #include "EnvironmentMap.h"
+#include <cmath> 
 
 uint8_t* read_grid(const char* filename, int w, int h) {
     uint8_t* grid = new uint8_t[w * h];
