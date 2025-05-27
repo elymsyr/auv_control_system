@@ -3,6 +3,16 @@
 #include <cstdint>
 #include <cuda_runtime.h>
 
+void process_batches_with_slide(void* map, void** batches, int num_batches, float dx, float dy) {
+    // 1. Slide the grid by dx/dy
+    launch_slide_kernel(map, dx, dy);
+    
+    // 2. Update points from all batches
+    for(int i = 0; i < num_batches; ++i) {
+        launch_update_kernel(map, batches[i]);
+    }
+}
+
 void fill_point_batch_with_random(void* batch, int grid_width, int grid_height) {
     PointBatch* h_batch = static_cast<PointBatch*>(batch);
     
@@ -12,8 +22,8 @@ void fill_point_batch_with_random(void* batch, int grid_width, int grid_height) 
     
     // Generate random points (host side)
     for(int i = 0; i < h_batch->count; ++i) {
-        h_coords[i].x = rand() % grid_width;    // Random x ∈ [0, width-1]
-        h_coords[i].y = rand() % grid_height;   // Random y ∈ [0, height-1]
+        h_coords[i].x = rand() % grid_width * 20;    // Random x ∈ [0, width-1]
+        h_coords[i].y = rand() % grid_height * 20;   // Random y ∈ [0, height-1]
         h_values[i] = rand() % 256;             // Random value ∈ [0,255]
         std::cout << "Point " << i << ": (" 
                   << h_coords[i].x << ", " 

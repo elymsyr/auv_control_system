@@ -26,6 +26,7 @@ void destroy_point_batch(void* batch);
 void launch_slide_kernel(void* map, float dx, float dy);
 void launch_update_kernel(void* map, void* batch);
 void save_grid_to_file(void* map, const char* filename);
+void process_batches_with_slide(void* map, void** batches, int num_batches, float dx, float dy);
 
 #ifdef __cplusplus
 }
