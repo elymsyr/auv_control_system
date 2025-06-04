@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <fstream>      // Add for file operations
 #include <vector_types.h>  // Add for int2
+#include <cstdlib>
 
 __host__ void EnvironmentMap::initialize(int w, int h) {
     width = w;
@@ -138,60 +139,40 @@ __global__ void pointUpdateKernel(EnvironmentMap* map, PointBatch batch) {
     }
 }
 
-__global__ void xrefCalculationKernel(const EnvironmentMap* map, float* result) {
-    extern __shared__ float shared[];
-    
-    int tid = threadIdx.x;
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    float sum = 0.0f;
-    int count = 0;
+extern "C" float* calculate_xref(void* map, int mission /*= 0*/, int state /*= 0*/) {
+    // EnvironmentMap* d_map = static_cast<EnvironmentMap*>(map);
 
-    // Process grid cells
-    if(idx < map->width * map->height) {
-        if(map->grid[idx] > 0) {  // Only count occupied cells
-            sum = static_cast<float>(map->grid[idx]);
-            count = 1;
+    // We will return a pointer to a 12‐element float array.
+    // The caller is responsible for calling std::free() on this pointer when done.
+    constexpr int LENGTH = 12;
+    float* result = static_cast<float*>(std::malloc(sizeof(float) * LENGTH));
+    if (!result) {
+        // Allocation failed
+        return nullptr;
+    }
+
+    // Fill with “dummy” values based on index (replace with your actual logic)
+    for (int i = 0; i < LENGTH; ++i) {
+        float value;
+        if (i < 3) {
+            value = 10.0f;
         }
-    }
-
-    // Shared memory reduction
-    shared[tid] = sum;
-    __syncthreads();
-
-    for(int s = blockDim.x/2; s > 0; s >>= 1) {
-        if(tid < s) {
-            shared[tid] += shared[tid + s];
+        else if (i < 6) {
+            value =  0.1f;
         }
-        __syncthreads();
+        else if (i < 8) {
+            value =  2.0f;
+        }
+        else if (i < 9) {
+            value =  1.0f;
+        }
+        else {
+            value =  0.0f;
+        }
+        result[i] = value;
     }
 
-    if(tid == 0) {
-        atomicAdd(result, shared[0]);
-    }
-
-    // Count reduction (similar logic for count if needed)
-    // ...
-}
-
-extern "C" float calculate_xref(void* map) {
-    EnvironmentMap* d_map = static_cast<EnvironmentMap*>(map);
-    float* d_result;
-    float h_result = 0.0f;
-    
-    const int blockSize = 256;
-    const int gridSize = (d_map->width * d_map->height + blockSize - 1) / blockSize;
-    const int sharedMemSize = blockSize * sizeof(float);
-
-    cudaMalloc(&d_result, sizeof(float));
-    cudaMemset(d_result, 0, sizeof(float));
-
-    xrefCalculationKernel<<<gridSize, blockSize, sharedMemSize>>>(d_map, d_result);
-    
-    // Optional: Add additional calculation steps here
-    cudaMemcpy(&h_result, d_result, sizeof(float), cudaMemcpyDeviceToHost);
-    
-    cudaFree(d_result);
-    return h_result;
+    return result;
 }
 
 void save_grid_to_file(void* map, const char* filename) {
@@ -263,22 +244,4 @@ void launch_update_kernel(void* map, void* batch) {
     const int gridSize = (d_batch->count + blockSize - 1) / blockSize;
     pointUpdateKernel<<<gridSize, blockSize>>>(d_map, *d_batch);
     cudaDeviceSynchronize();
-}
-
-__device__ float barrier_function(const EnvironmentMap* map, float x, float y) {
-    float grid_x = (x - map->x_r_) / map->x_r_cm_ + map->width / 2.0f;
-    float grid_y = (y - map->y_r_) / map->y_r_cm_ + map->height / 2.0f;
-    
-    int ix = static_cast<int>(round(grid_x));
-    int iy = static_cast<int>(round(grid_y)));
-    
-    if (ix >= 0 && ix < map->width && iy >= 0 && iy < map->height) {
-        uint8_t val = map->grid[iy * map->width + ix];
-        // Convert PointID to distance: obstacles are negative
-        if (static_cast<PointID>(val) == PointID::OBSTACLE) {
-            return -1.0f; // Unsafe region
-        }
-        return 1.0f; // Safe region
-    }
-    return 0.0f; // Unknown region
 }

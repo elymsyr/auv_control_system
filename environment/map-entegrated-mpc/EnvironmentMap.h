@@ -9,6 +9,18 @@
 
 #ifdef __cplusplus
 extern "C" {
+// C-compatible function declarations
+float* calculate_xref(void* map, int mission, int state);
+void* create_environment_map(int w, int h);
+void destroy_environment_map(void* map);
+void* create_point_batch(int count);
+void destroy_point_batch(void* batch);
+void launch_slide_kernel(void* map, float dx, float dy);
+void launch_update_kernel(void* map, void* batch);
+void save_grid_to_file(void* map, const char* filename);
+void process_batches_with_slide(void* map, void** batches, int num_batches, float dx, float dy);
+void barrier_func(const float* positions, float* outputs, int n, void* map);
+}
 #endif
 
 enum class PointID {
@@ -28,22 +40,6 @@ struct PointBatch {
     uint8_t* values_dev;
 };
 
-// C-compatible function declarations
-float calculate_xref(void* map);
-void* create_environment_map(int w, int h);
-void destroy_environment_map(void* map);
-void* create_point_batch(int count);
-void destroy_point_batch(void* batch);
-void launch_slide_kernel(void* map, float dx, float dy);
-void launch_update_kernel(void* map, void* batch);
-void save_grid_to_file(void* map, const char* filename);
-void process_batches_with_slide(void* map, void** batches, int num_batches, float dx, float dy);
-
-#ifdef __cplusplus
-}
-#endif
-
-// CUDA-specific declarations
 class EnvironmentMap {
 public:
     int width, height;
@@ -71,5 +67,6 @@ __global__ void slideGridKernel(EnvironmentMap* map, int shiftX, int shiftY);
 __global__ void setPointKernel(EnvironmentMap* map, int x, int y, uint8_t value);
 __global__ void pointUpdateKernel(EnvironmentMap* map, const PointBatch batch);
 __device__ float barrier_function(const EnvironmentMap* map, float x, float y);
+__global__ void barrier_kernel(const EnvironmentMap* map, float* positions, float* outputs, int n);
 
 #endif // ENVIRONMENT_MAP_H
