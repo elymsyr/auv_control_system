@@ -4,7 +4,7 @@
 #include <fstream>
 
 int main() {
-    std::vector<std::string> test_vector = {"0", "1", "2"};
+    std::vector<std::string> test_vector = {"3", "4", "0", "1", "2"};
     for (int i = 0; i < 10; ++i) {
         std::cout << "Iteration: " << i << std::endl;
         for (const auto& test : test_vector) {
