@@ -103,6 +103,7 @@ int main() {
     while (running) {
         // 1. Update map with sensor data
         void* batch_one = create_point_batch(150);
+        // fill_point_batch_with_random(batch, W, H);
         PointBatch* batch = static_cast<PointBatch*>(batch_one);
         launch_update_kernel(map, batch);
 
