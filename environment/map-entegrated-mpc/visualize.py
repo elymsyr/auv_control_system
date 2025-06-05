@@ -1,31 +1,52 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
+from glob import glob
 
-def visualize_grid(filename, size=(129,129)):
-    grid = np.fromfile(filename, dtype=np.uint8).reshape(size)
-    plt.imshow(grid, cmap='viridis', vmin=0, vmax=255)
-    plt.colorbar()
-    plt.title(filename)
-    plt.show()
+def visualize_grids():
+    # Get all bin files
+    bin_files = glob('*.bin')
+    
+    # Group files by title
+    file_groups = {}
+    for f in bin_files:
+        # Extract title and subtitle
+        parts = os.path.splitext(f)[0].split('_')
+        if len(parts) < 3:
+            continue
 
-# Compare two grid states
-def compare_grids(file_before, file_after):
-    grid1 = np.fromfile(file_before, dtype=np.uint8)
-    grid2 = np.fromfile(file_after, dtype=np.uint8)
-    
-    print(f"Max difference: {np.max(np.abs(grid1 - grid2))}")
-    print(f"Changed pixels: {np.sum(grid1 != grid2)}")
-    
-    plt.subplot(121)
-    plt.imshow(grid1.reshape(129,129), cmap='viridis')
-    plt.title('Before')
-    
-    plt.subplot(122)
-    plt.imshow(grid2.reshape(129,129), cmap='viridis')
-    plt.title('After')
-    
-    plt.show()
+        title = parts[1]
+        subtitle = '_'.join(parts[2:]) if len(parts) > 2 else 'no_subtitle'
 
-# Usage
-visualize_grid("test_initial.bin")
-compare_grids("test_initial.bin", "test_shifted.bin")
+        if title not in file_groups:
+            file_groups[title] = []
+        file_groups[title].append((subtitle, f))
+    
+    # Visualize each group
+    for title, files in file_groups.items():
+        files.sort(key=lambda x: x[0])  # Sort by subtitle
+        num_files = len(files)
+        
+        plt.figure(figsize=(15, 5))
+        plt.suptitle(f'Title: {title}', fontsize=16)
+        
+        for i, (subtitle, filename) in enumerate(files):
+            try:
+                # Read and reshape grid
+                grid_data = np.fromfile(filename, dtype=np.uint8)
+                size = int(np.sqrt(len(grid_data)))
+                grid = grid_data.reshape((size, size))
+                
+                # Create subplot
+                plt.subplot(1, num_files, i+1)
+                plt.imshow(grid, cmap='viridis', vmin=0, vmax=255)
+                plt.colorbar()
+                plt.title(f'Subtitle: {subtitle}')
+            except Exception as e:
+                print(f"Error processing {filename}: {str(e)}")
+        
+        plt.tight_layout()
+        plt.show()
+
+# Run the visualization
+visualize_grids()

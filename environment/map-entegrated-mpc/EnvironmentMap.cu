@@ -1,247 +1,364 @@
 #include "EnvironmentMap.h"
-#include <cuda_runtime.h>
-#include <cstdint>
-#include <fstream>      // Add for file operations
-#include <vector_types.h>  // Add for int2
-#include <cstdlib>
+#include <chrono>
+#include <algorithm>
+#include <tuple>
 
-__host__ void EnvironmentMap::initialize(int w, int h) {
-    width = w;
-    height = h;
-    x_ = y_ = yaw_ = 0.0f;
-    x_r_ = y_r_ = 0.0f;
-    sx_ = sy_ = 0;
-    x_r_cm_ = 25.0f;
-    y_r_cm_ = 25.0f;
-    round_ = 2 * M_PI;
-    size_t size = w * h * sizeof(uint8_t);
-    cudaMallocManaged(&grid, size);  // Unified Memory
-    cudaMallocManaged(&tempGrid, size);
-    cudaMemset(grid, 0, size);
-}
-
-__host__ void EnvironmentMap::cleanup() {
-    cudaFree(grid);
-    cudaFree(tempGrid);
-}
-
-__host__ EnvironmentMap::EnvironmentMap(int w, int h)
-    : width(w), height(h),
-      sx_(0), sy_(0), x_r_(0.0f), y_r_(0.0f) {  // Initialize new members
-    size_t size = w * h * sizeof(uint8_t);
-    cudaMalloc(&grid, size);
-    cudaMalloc(&tempGrid, size);
-    cudaMemset(grid, 0, size);
-}
-
-__host__ EnvironmentMap::~EnvironmentMap() {
-    cudaFree(grid);
-    cudaFree(tempGrid);
-}
-
-__host__ void EnvironmentMap::applyBatchUpdate(const PointBatch& batch) {
-    const int blockSize = 256;
-    const int gridSize = (batch.count + blockSize - 1) / blockSize;
+// Device function to compute point to line distance
+__device__ float point_to_line_distance(float px, float py, 
+                                      float x1, float y1, 
+                                      float x2, float y2) {
+    // Vector from point to line start
+    float dx = px - x1;
+    float dy = py - y1;
     
-    pointUpdateKernel<<<gridSize, blockSize>>>(this, batch);
-    cudaDeviceSynchronize();
+    // Vector representing the line
+    float line_dx = x2 - x1;
+    float line_dy = y2 - y1;
+    
+    // Length of line segment squared
+    float length_sq = line_dx * line_dx + line_dy * line_dy;
+    
+    // Calculate projection scalar
+    float t = (dx * line_dx + dy * line_dy) / (length_sq + 1e-6f);
+    t = fmaxf(0.0f, fminf(1.0f, t));  // Clamp to segment
+    
+    // Calculate closest point on line
+    float proj_x = x1 + t * line_dx;
+    float proj_y = y1 + t * line_dy;
+    
+    // Return distance to closest point
+    return sqrtf((px - proj_x) * (px - proj_x) + 
+                (py - proj_y) * (py - proj_y));
 }
 
-__device__ void EnvironmentMap::iterate(float dx, float dy) {
+// Kernel for obstacle selection
+__global__ void obstacleSelectionKernel(uint8_t* grid, int width, int height, 
+                                      float current_x, float current_y,
+                                      float projected_x, float projected_y,
+                                      float x_r, float y_r, float x_r_cm, float y_r_cm,
+                                      float* dists, float2* coords, int* count, int max_candidates) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idy = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    if (idx >= width || idy >= height) return;
+    
+    int grid_idx = idy * width + idx;
+    if (grid[grid_idx] > 200) {  // Obstacle threshold
+        // Convert grid coordinates to world coordinates
+        float world_x = x_r + (idx - width/2.0f) * x_r_cm;
+        float world_y = y_r + (idy - height/2.0f) * y_r_cm;
+        
+        // Calculate distance to path
+        float dist = point_to_line_distance(world_x, world_y, 
+                                          current_x, current_y,
+                                          projected_x, projected_y);
+        
+        // Get position in candidate array
+        int pos = atomicAdd(count, 1);
+        if (pos < max_candidates) {
+            dists[pos] = dist;
+            coords[pos] = make_float2(world_x, world_y);
+        }
+    }
+}
+
+// Device functions
+__global__ void slidePhase1(EnvironmentMap* map, int inc_sx, int inc_sy) {
+    int tx = blockIdx.x * blockDim.x + threadIdx.x;
+    int ty = blockIdx.y * blockDim.y + threadIdx.y;
+    if (tx >= map->width_ || ty >= map->height_) return;
+
+    int dst_idx = ty * map->width_ + tx;
+    int src_x = tx - inc_sx;
+    int src_y = ty - inc_sy;
+
+    if (src_x >= 0 && src_x < map->width_ && src_y >= 0 && src_y < map->height_) {
+        map->tempGrid_[dst_idx] = map->grid_[src_y * map->width_ + src_x];
+    } else {
+        map->tempGrid_[dst_idx] = 0;
+    }
+}
+
+__global__ void slidePhase2(EnvironmentMap* map) {
+    int tx = blockIdx.x * blockDim.x + threadIdx.x;
+    int ty = blockIdx.y * blockDim.y + threadIdx.y;
+    if (tx >= map->width_ || ty >= map->height_) return;
+
+    int idx = ty * map->width_ + tx;
+    map->grid_[idx] = map->tempGrid_[idx];
+}
+
+__global__ void pointUpdateKernel(EnvironmentMap* map, PointBatch* batch) {
+    unsigned tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= batch->count) return;
+
+    float2 coord = batch->coords_dev[tid];
+    uint8_t val = batch->values_dev[tid];
+
+    int x_coor = static_cast<int>(roundf(
+        (coord.x - map->x_r_) / map->x_r_cm_ + map->width_ / 2.0f));
+    int y_coor = static_cast<int>(roundf(
+        (coord.y - map->y_r_) / map->y_r_cm_ + map->height_ / 2.0f));
+
+    if (x_coor >= 0 && x_coor < map->width_ && 
+        y_coor >= 0 && y_coor < map->height_) {
+        map->grid_[y_coor * map->width_ + x_coor] = val;
+    }
+}
+
+// PointBatch management
+PointBatch* EnvironmentMap::createPointBatch(int count) {
+    PointBatch* batch = new PointBatch;
+    batch->count = count;
+    cudaMalloc(&batch->coords_dev, count * sizeof(float2));
+    cudaMalloc(&batch->values_dev, count * sizeof(uint8_t));
+    return batch;
+}
+
+void EnvironmentMap::destroyPointBatch(PointBatch* batch) {
+    cudaFree(batch->coords_dev);
+    cudaFree(batch->values_dev);
+    delete batch;
+}
+
+void EnvironmentMap::fillPointBatchWithRandom(PointBatch* batch, int grid_width, int grid_height) {
+    float2* h_coords = new float2[batch->count];
+    uint8_t* h_values = new uint8_t[batch->count];
+    
+    for(int i = 0; i < batch->count; ++i) {
+        h_coords[i].x = rand() % (grid_width * 20);
+        h_coords[i].y = rand() % (grid_height * 20);
+        h_values[i] = rand() % 256;
+    }
+    
+    cudaMemcpy(batch->coords_dev, h_coords, 
+               batch->count * sizeof(float2), cudaMemcpyHostToDevice);
+    cudaMemcpy(batch->values_dev, h_values,
+               batch->count * sizeof(uint8_t), cudaMemcpyHostToDevice);
+    
+    delete[] h_coords;
+    delete[] h_values;
+}
+
+// EnvironmentMap core methods
+EnvironmentMap::EnvironmentMap(int width, int height) 
+    : width_(width), height_(height),
+      x_(0.0f), y_(0.0f), yaw_(0.0f),
+      x_r_(0.0f), y_r_(0.0f),
+      sx_(0), sy_(0),
+      x_r_cm_(25.0f), y_r_cm_(25.0f),
+      round_(2 * M_PI) {
+    
+    size_t size = width * height * sizeof(uint8_t);
+    cudaMalloc(&grid_, size);
+    cudaMalloc(&tempGrid_, size);
+    cudaMemset(grid_, 0, size);
+    single_batch_ = createPointBatch(1);
+}
+
+EnvironmentMap::~EnvironmentMap() {
+    destroyPointBatch(single_batch_);
+    cudaFree(grid_);
+    cudaFree(tempGrid_);
+}
+
+void EnvironmentMap::slide(float dx, float dy) {
     x_ += dx;
     y_ += dy;
     x_r_ += dx;
     y_r_ += dy;
+    
     if (yaw_ > round_) {
         yaw_ -= round_;
     }
-    sx_ = static_cast<int>(x_ / 25.0f);
-    sy_ = static_cast<int>(y_ / 25.0f);
+    
+    int new_sx = static_cast<int>(x_ / 25.0f);
+    int new_sy = static_cast<int>(y_ / 25.0f);
+    int inc_sx = new_sx - sx_;
+    int inc_sy = new_sy - sy_;
+    
+    sx_ = new_sx;
+    sy_ = new_sy;
     x_ -= sx_ * 25.0f;
     y_ -= sy_ * 25.0f;
-    slideGrid();
-}
-
-__device__ void EnvironmentMap::slideGrid() {
-    int tx = blockIdx.x * blockDim.x + threadIdx.x;
-    int ty = blockIdx.y * blockDim.y + threadIdx.y;
-    if (tx >= width || ty >= height) return;
-
-    int srcX = tx - sx_;
-    int srcY = ty - sy_;
-    int dstIdx = ty * width + tx;
-
-    if (srcX >= 0 && srcX < width && srcY >= 0 && srcY < height) {
-        int srcIdx = srcY * width + srcX;
-        tempGrid[dstIdx] = grid[srcIdx];
-    } else {
-        tempGrid[dstIdx] = 0.0f;
-    }
-
-    __syncthreads();
-    grid[dstIdx] = tempGrid[dstIdx];
-}
-
-__device__ void EnvironmentMap::setPoint(int x, int y, uint8_t value) {
-    if (x >= 0 && x < width && y >= 0 && y < height) {
-        grid[y * width + x] = value;
-    }
-}
-
-__global__ void setPointKernel(EnvironmentMap* map, int x, int y, uint8_t value) {
-    map->setPoint(x, y, value);
-}
-
-__global__ void iterateKernel(EnvironmentMap* map, float dx, float dy) {
-    map->iterate(dx, dy);
-}
-
-__global__ void slideGridKernel(EnvironmentMap* map, int sx_, int sy_) {
-    int tx = blockIdx.x * blockDim.x + threadIdx.x;
-    int ty = blockIdx.y * blockDim.y + threadIdx.y;
-    if (tx >= map->width || ty >= map->height) return;
-
-    // Phase 1: Copy grid -> tempGrid with shift
-    int srcX = tx - sx_;
-    int srcY = ty - sy_;
-    int dstIdx = ty * map->width + tx;
-
-    if (srcX >= 0 && srcX < map->width && srcY >= 0 && srcY < map->height) {
-        map->tempGrid[dstIdx] = map->grid[srcY * map->width + srcX];
-    } else {
-        map->tempGrid[dstIdx] = 0;  // Use 0 for uint8_t
-    }
-
-    // Phase 2: Copy tempGrid -> grid (after all threads complete phase 1)
-    __syncthreads();  // Now safe within block
-    map->grid[dstIdx] = map->tempGrid[dstIdx];
-}
-
-__global__ void pointUpdateKernel(EnvironmentMap* map, PointBatch batch) {
-    const unsigned tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if(tid >= batch.count) return;
     
-    const int2 coord = batch.coords_dev[tid];
-    const uint8_t val = batch.values_dev[tid];
-
-    int x_coor = static_cast<int>(round((coord.x - map->x_r_) / map->x_r_cm_ + map->width / 2.0f));
-    int y_coor = static_cast<int>(round((coord.y - map->y_r_) / map->y_r_cm_ + map->height / 2.0f));
-
-    // if (tid == 0) {
-    //     printf("World coord: (%d, %d) → Grid index: (%d, %d)\n",
-    //            coord.x, coord.y, x_coor, y_coor);
-    //     printf("x_coor(%d) = round(coord.x(%d) - map->x_r_(%f)) / map->x_r_cm_(%f) + map->width(%d) / 2.0f)",
-    //            x_coor, coord.x, map->x_r_, map->x_r_cm_, map->width);
-    // }
-
-    if (x_coor >= 0 && x_coor < map->width && y_coor >= 0 && y_coor < map->height) {
-        map->grid[y_coor * map->width + x_coor] = val;
-    }
+    dim3 threads(16, 16);
+    dim3 blocks((width_ + threads.x - 1) / threads.x,
+                (height_ + threads.y - 1) / threads.y);
+    
+    slidePhase1<<<blocks, threads>>>(this, inc_sx, inc_sy);
+    cudaDeviceSynchronize();
+    slidePhase2<<<blocks, threads>>>(this);
+    cudaDeviceSynchronize();
 }
 
-extern "C" float* calculate_xref(void* map, int mission /*= 0*/, int state /*= 0*/) {
-    // EnvironmentMap* d_map = static_cast<EnvironmentMap*>(map);
-
-    // We will return a pointer to a 12‐element float array.
-    // The caller is responsible for calling std::free() on this pointer when done.
-    constexpr int LENGTH = 12;
-    float* result = static_cast<float*>(std::malloc(sizeof(float) * LENGTH));
-    if (!result) {
-        // Allocation failed
-        return nullptr;
-    }
-
-    // Fill with “dummy” values based on index (replace with your actual logic)
-    for (int i = 0; i < LENGTH; ++i) {
-        float value;
-        if (i < 3) {
-            value = 10.0f;
-        }
-        else if (i < 6) {
-            value =  0.1f;
-        }
-        else if (i < 8) {
-            value =  2.0f;
-        }
-        else if (i < 9) {
-            value =  1.0f;
-        }
-        else {
-            value =  0.0f;
-        }
-        result[i] = value;
-    }
-
-    return result;
+void EnvironmentMap::updateWithBatch(PointBatch* batch) {
+    const int blockSize = 256;
+    const int gridSize = (batch->count + blockSize - 1) / blockSize;
+    pointUpdateKernel<<<gridSize, blockSize>>>(this, batch);
+    cudaDeviceSynchronize();
 }
 
-void save_grid_to_file(void* map, const char* filename) {
-    EnvironmentMap* d_map = static_cast<EnvironmentMap*>(map);
-    uint8_t* h_grid = new uint8_t[d_map->width * d_map->height];
+void EnvironmentMap::updateSinglePoint(float world_x, float world_y, uint8_t value) {
+    float2 coord = make_float2(world_x, world_y);
+    uint8_t val = value;
+
+    cudaMemcpy(single_batch_->coords_dev, &coord, sizeof(float2), cudaMemcpyHostToDevice);
+    cudaMemcpy(single_batch_->values_dev, &val, sizeof(uint8_t), cudaMemcpyHostToDevice);
     
-    cudaMemcpy(h_grid, d_map->grid, 
-              d_map->width * d_map->height * sizeof(uint8_t),
-              cudaMemcpyDeviceToHost);
+    updateWithBatch(single_batch_);
+}
+
+uint8_t* EnvironmentMap::getGridDevicePtr() const {
+    return grid_;
+}
+
+void EnvironmentMap::copyGridToHost(uint8_t* host_buffer) const {
+    size_t grid_size = width_ * height_ * sizeof(uint8_t);
+    cudaMemcpy(host_buffer, grid_, grid_size, cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
+}
+
+void EnvironmentMap::initializeTestPattern() {
+    slide(0, 0);
+    updateSinglePoint(64.0f, 64.0f, 255);
+}
+
+void EnvironmentMap::save(const char* filename) const {
+    uint8_t* h_grid = new uint8_t[width_ * height_];
+    copyGridToHost(h_grid);
     
-    std::ofstream file(filename, std::ios::binary);
-    file.write(reinterpret_cast<char*>(h_grid), 
-             d_map->width * d_map->height);
+    std::string test_filename = "test_" + std::string(filename);
+    std::ofstream file(test_filename, std::ios::binary);
+    file.write(reinterpret_cast<char*>(h_grid), width_ * height_);
     file.close();
     
     delete[] h_grid;
 }
 
-// Environment Map Management
-void* create_environment_map(int w, int h) {
-    EnvironmentMap* map;
-    cudaMallocManaged(&map, sizeof(EnvironmentMap));
-    map->initialize(w, h);
-    return map;
+void EnvironmentMap::set_velocity(float vx, float vy) {
+    vx_ = vx;
+    vy_ = vy;
 }
 
-void destroy_environment_map(void* map) {
-    EnvironmentMap* d_map = static_cast<EnvironmentMap*>(map);
-    d_map->cleanup();
-    cudaFree(d_map);
+void EnvironmentMap::set_x_ref(float x, float y) {
+    ref_x_ = x;
+    ref_y_ = y;
 }
 
-// Point Batch Management
-void* create_point_batch(int count) {
-    PointBatch* batch;
-    cudaMallocManaged(&batch, sizeof(PointBatch));
-    cudaMalloc(&batch->coords_dev, count * sizeof(int2));
-    cudaMalloc(&batch->values_dev, count * sizeof(uint8_t));
-    batch->count = count;
-    return batch;
-}
-
-void destroy_point_batch(void* batch) {
-    PointBatch* d_batch = static_cast<PointBatch*>(batch);
-    cudaFree(d_batch->coords_dev);
-    cudaFree(d_batch->values_dev);
-    cudaFree(d_batch);
-}
-
-void launch_slide_kernel(void* map, float dx, float dy) {
-    auto start = std::chrono::high_resolution_clock::now();
-    EnvironmentMap* d_map = static_cast<EnvironmentMap*>(map);
+std::vector<std::pair<float, float>> EnvironmentMap::obstacle_selection(int number_obs) {
+    const int MAX_CANDIDATES = 10000;
+    
+    // Device memory for candidates
+    float* d_dists;
+    float2* d_coords;
+    int* d_count;
+    
+    cudaMalloc(&d_dists, MAX_CANDIDATES * sizeof(float));
+    cudaMalloc(&d_coords, MAX_CANDIDATES * sizeof(float2));
+    cudaMalloc(&d_count, sizeof(int));
+    cudaMemset(d_count, 0, sizeof(int));
+    
+    // Calculate projected position
+    float current_x = x_r_;
+    float current_y = y_r_;
+    float projected_x, projected_y;
+    
+    if (ref_x_ != 0.0f || ref_y_ != 0.0f) {
+        projected_x = ref_x_;
+        projected_y = ref_y_;
+    } else {
+        projected_x = current_x + vx_ * 2.0f;  // 2 seconds lookahead
+        projected_y = current_y + vy_ * 2.0f;
+    }
+    
+    // Launch kernel
     dim3 threads(16, 16);
-    dim3 blocks(
-        (d_map->width + threads.x - 1) / threads.x,
-        (d_map->height + threads.y - 1) / threads.y
+    dim3 blocks((width_ + threads.x - 1) / threads.x,
+                (height_ + threads.y - 1) / threads.y);
+    
+    obstacleSelectionKernel<<<blocks, threads>>>(
+        grid_, width_, height_,
+        current_x, current_y,
+        projected_x, projected_y,
+        x_r_, y_r_, x_r_cm_, y_r_cm_,
+        d_dists, d_coords, d_count, MAX_CANDIDATES
     );
-    iterateKernel<<<blocks, threads>>>(d_map, dx, dy);
     cudaDeviceSynchronize();
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    // std::cout << "Slide kernel: " << duration.count() << "μs\n";
+    
+    // Copy count back to host
+    int h_count;
+    cudaMemcpy(&h_count, d_count, sizeof(int), cudaMemcpyDeviceToHost);
+    h_count = (h_count < MAX_CANDIDATES) ? h_count : MAX_CANDIDATES;
+    
+    // Copy candidate data
+    std::vector<float> h_dists(h_count);
+    std::vector<float2> h_coords(h_count);
+    
+    if (h_count > 0) {
+        cudaMemcpy(h_dists.data(), d_dists, h_count * sizeof(float), cudaMemcpyDeviceToHost);
+        cudaMemcpy(h_coords.data(), d_coords, h_count * sizeof(float2), cudaMemcpyDeviceToHost);
+    }
+    
+    // Cleanup device memory
+    cudaFree(d_dists);
+    cudaFree(d_coords);
+    cudaFree(d_count);
+    
+    // Create vector of pairs for sorting
+    std::vector<std::pair<float, float2>> candidates;
+    for (int i = 0; i < h_count; i++) {
+        candidates.push_back({h_dists[i], h_coords[i]});
+    }
+    
+    // Sort by distance
+    std::sort(candidates.begin(), candidates.end(), 
+        [](const auto& a, const auto& b) {
+            return a.first < b.first;
+        });
+    
+    // Prepare selected obstacles
+    std::vector<std::pair<float, float>> selected;
+    int count = (candidates.size() < static_cast<size_t>(number_obs)) ? 
+                candidates.size() : number_obs;
+    
+    for (int i = 0; i < count; i++) {
+        selected.push_back({candidates[i].second.x, candidates[i].second.y});
+    }
+    
+    // Pad with distant obstacles if needed
+    for (int i = count; i < number_obs; i++) {
+        selected.push_back({10000.0f, 10000.0f});  // Far away
+    }
+    
+    return selected;
 }
 
-void launch_update_kernel(void* map, void* batch) {
-    EnvironmentMap* d_map = static_cast<EnvironmentMap*>(map);
-    PointBatch* d_batch = static_cast<PointBatch*>(batch);
-    const int blockSize = 256;
-    const int gridSize = (d_batch->count + blockSize - 1) / blockSize;
-    pointUpdateKernel<<<gridSize, blockSize>>>(d_map, *d_batch);
-    cudaDeviceSynchronize();
+// Utility functions
+extern "C" float* calculate_xref(EnvironmentMap* map, int mission, int state) {
+    constexpr int LENGTH = 12;
+    float* result = static_cast<float*>(malloc(sizeof(float) * LENGTH));
+    if (!result) return nullptr;
+
+    for (int i = 0; i < LENGTH; ++i) {
+        if (i < 3) result[i] = 10.0f;
+        else if (i < 6) result[i] = 0.1f;
+        else if (i < 8) result[i] = 2.0f;
+        else if (i < 9) result[i] = 1.0f;
+        else result[i] = 0.0f;
+    }
+    return result;
+}
+
+void simulate_neural_network(uint8_t* grid_data, int width, int height) {
+    std::vector<uint8_t> host_grid(width * height);
+    cudaMemcpy(host_grid.data(), grid_data, 
+               width * height * sizeof(uint8_t), 
+               cudaMemcpyDeviceToHost);
+    
+    uint8_t max_val = 0;
+    for (int i = 0; i < width * height; i++) {
+        if (host_grid[i] > max_val) max_val = host_grid[i];
+    }
+    std::cout << "Max grid value: " << static_cast<int>(max_val) << std::endl;
 }

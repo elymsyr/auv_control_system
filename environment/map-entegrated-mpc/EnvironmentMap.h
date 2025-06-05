@@ -1,72 +1,70 @@
-// EnvironmentMap.h
 #ifndef ENVIRONMENT_MAP_H
 #define ENVIRONMENT_MAP_H
 
+#include <cuda_runtime.h>
+#include <iostream>
+#include <fstream>
+#include <cstdlib>
+#include <cmath>
+#include <vector>
+#include <utility>
 #include <cstdint>
-#include <vector_types.h>
-#include <thrust/device_vector.h>
-#include <cmath> 
 
-#ifdef __cplusplus
-extern "C" {
-// C-compatible function declarations
-float* calculate_xref(void* map, int mission, int state);
-void* create_environment_map(int w, int h);
-void destroy_environment_map(void* map);
-void* create_point_batch(int count);
-void destroy_point_batch(void* batch);
-void launch_slide_kernel(void* map, float dx, float dy);
-void launch_update_kernel(void* map, void* batch);
-void save_grid_to_file(void* map, const char* filename);
-void process_batches_with_slide(void* map, void** batches, int num_batches, float dx, float dy);
-void barrier_func(const float* positions, float* outputs, int n, void* map);
-}
-#endif
-
-enum class PointID {
-    UNDISCOVERED,
-    DISCOVERED,
-    UNKNOWN,
-    OBSTACLE,
-    DISCOVERED_LINE,
-    UNDISCOVERED_LINE,
-    OBJECT_LINE,
-};
-
-// C-compatible struct for batch updates
 struct PointBatch {
     int count;
-    int2* coords_dev;
+    float2* coords_dev;
     uint8_t* values_dev;
 };
 
 class EnvironmentMap {
 public:
-    int width, height;
-    int sx_, sy_;
+    EnvironmentMap(int width, int height);
+    ~EnvironmentMap();
+
+    // Core map operations
+    void slide(float dx, float dy);
+    void updateWithBatch(class PointBatch* batch);
+    void updateSinglePoint(float world_x, float world_y, uint8_t value);
+    
+    // Neural network utilities
+    uint8_t* getGridDevicePtr() const;
+    void copyGridToHost(uint8_t* host_buffer) const;
+    
+    // Initialization & debugging
+    void initializeTestPattern();
+    void save(const char* filename) const;
+
+    // Obstacle selection
+    std::vector<std::pair<float, float>> obstacle_selection(int number_obs);
+    void set_x_ref(float x, float y);
+    void set_velocity(float vx, float vy);
+
+    // Point batch management
+    static class PointBatch* createPointBatch(int count);
+    static void destroyPointBatch(class PointBatch* batch);
+    static void fillPointBatchWithRandom(class PointBatch* batch, int grid_width, int grid_height);
+
+    // Public member variables for kernel access
+    int width_;
+    int height_;
     float x_, y_, yaw_;
     float x_r_, y_r_;
+    int sx_, sy_;
     float x_r_cm_, y_r_cm_;
+    uint8_t *grid_;
+    uint8_t *tempGrid_;
+    
+private:
     float round_;
-    uint8_t* grid;
-    uint8_t* tempGrid;
-
-    EnvironmentMap(int w, int h);
-    __host__ ~EnvironmentMap();
-    __host__ void initialize(int w, int h);
-    __host__ void cleanup();
-    __device__ void iterate(float dx, float dy);
-    __host__ void applyBatchUpdate(const PointBatch& batch);
-    __device__ void slideGrid();
-    __device__ void setPoint(int x, int y, uint8_t value);
+    class PointBatch* single_batch_;
+    float vx_ = 0.0f;
+    float vy_ = 0.0f;
+    float ref_x_ = 0.0f;
+    float ref_y_ = 0.0f;
 };
 
-// Kernel declarations
-__global__ void iterateKernel(EnvironmentMap* map, float dx, float dy);
-__global__ void slideGridKernel(EnvironmentMap* map, int shiftX, int shiftY);
-__global__ void setPointKernel(EnvironmentMap* map, int x, int y, uint8_t value);
-__global__ void pointUpdateKernel(EnvironmentMap* map, const PointBatch batch);
-__device__ float barrier_function(const EnvironmentMap* map, float x, float y);
-__global__ void barrier_kernel(const EnvironmentMap* map, float* positions, float* outputs, int n);
+// Utility functions
+extern "C" float* calculate_xref(EnvironmentMap* map, int mission, int state);
+void simulate_neural_network(uint8_t* grid_data, int width, int height);
 
-#endif // ENVIRONMENT_MAP_H
+#endif
