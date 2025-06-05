@@ -32,18 +32,18 @@ int main() {
     void* random_batch = create_point_batch(100);
     MapController::fill_point_batch_with_random(random_batch, W, H);
     
-    void* sensor_batch = create_point_batch(150);
-    MapController::fill_point_batch_with_random(sensor_batch, W, H);
+    // void* sensor_batch = create_point_batch(150);
+    // MapController::fill_point_batch_with_random(sensor_batch, W, H);
 
-    // 3. Update map with batches
-    void* batches[] = {random_batch, sensor_batch};
-    controller.process_batches_with_slide(batches, 2, 0, 0);
+    // // 3. Update map with batches
+    // void* batches[] = {random_batch, sensor_batch};
+    // controller.process_batches_with_slide(batches, 2, 0, 0);
     
-    // 4. Test single point update
-    controller.update_single_point(322.0f, 123.0f, 255);
+    // // 4. Test single point update
+    // controller.update_single_point(322.0f, 123.0f, 255);
     
     // 5. Test test pattern
-    controller.initialize_test_pattern();
+    // controller.initialize_test_pattern();
     controller.save_map("test_initial.bin");
     
     // 6. Test slide
@@ -55,7 +55,7 @@ int main() {
     simulate_neural_network(grid_device_ptr, W, H);
     
     // 8. MPC integration test
-    VehicleModel model("config.json");
+    VehicleModel model("config.json", controller.get_map());
     NonlinearMPC mpc(model, 20, 0.1);
     
     bool running = true;
@@ -97,7 +97,7 @@ int main() {
 }
 
 // # Clean up previous artifacts
-// rm -f *.o *.so main jit_* libdynamics_func*
+// rm -f *.o *.so main jit_* libdynamics_func* *.bin
 
 // # 1. Compile CUDA environment
 // nvcc -arch=sm_75 -c EnvironmentMap.cu -o EnvironmentMap.o
@@ -111,10 +111,7 @@ int main() {
 // # 3. Compile Map Controller code
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c MapController.cpp -o MapController.o
 
-// # 4. Build barrier function as shared library
-// nvcc -arch=sm_75 -Xcompiler -fPIC -shared barrier.cu -o barrier.so
-
-// # 5. Link all objects
+// # 4. Link all objects
 // g++ -o main EnvironmentMap.o main.o mpc.o MapController.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lcasadi -lipopt -lzmq -lcudart -L/usr/local/cuda/lib64
 
 // # 6. Run

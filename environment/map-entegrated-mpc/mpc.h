@@ -6,14 +6,16 @@
 #include <vector>
 #include <optional>
 #include <string>
+#include "EnvironmentMap.h"
 
 using namespace casadi;
 using json = nlohmann::json;
 
 class VehicleModel {
 public:
-    explicit VehicleModel(const std::string& config_path);
+    explicit VehicleModel(const std::string& config_path, EnvironmentMap* map);
 
+    MX barrier_function_mx(const MX& x, const MX& y) const;
     MX skew_symmetric(const MX& a) const;
     MX transformation_matrix(const MX& eta) const;
     MX coriolis_matrix(const MX& nu) const;
@@ -25,7 +27,9 @@ public:
     MX get_M_inv() const;
     double get_p_front_mid_max() const;
     double get_p_rear_max() const;
+    bool has_map() const { return map_ != nullptr; }
 
+    EnvironmentMap* map_;
 private:
     void load_config(const std::string& path);
     void calculate_linear();
@@ -51,8 +55,7 @@ private:
 
 class NonlinearMPC {
 public:
-    NonlinearMPC(const VehicleModel& model, int N = 20, double dt = 0.1);
-
+    NonlinearMPC(const VehicleModel& model, int N = 20, double dt = 0.1, MX eps = MX(1e-3));
     void reset_previous_solution();
     std::pair<DM, DM> solve(const DM& x0, const DM& x_ref);
 
@@ -61,7 +64,7 @@ private:
     int N_, nx_, nu_;
     double dt_;
     Opti opti_;
-    MX X_, U_;
+    MX X_, U_, eps_;
     MX x0_param_, x_ref_param_;
     std::optional<OptiSol> prev_sol_;
 

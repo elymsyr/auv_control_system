@@ -4,13 +4,44 @@
 #include <cmath>
 #include <stdexcept>
 #include <filesystem>
+#include "EnvironmentMap.h"
 
 using namespace casadi;
 using json = nlohmann::json;
 
-VehicleModel::VehicleModel(const std::string& config_path) {
+VehicleModel::VehicleModel(const std::string& config_path, EnvironmentMap* map)
+    : map_(map) {
     load_config(config_path);
     calculate_linear();
+}
+
+MX VehicleModel::barrier_function_mx(const MX& x, const MX& y) const {
+    if (!map_) return MX(1.0);  // Default safe value
+
+    // Convert world coordinates to grid indices
+    MX grid_x = (x - map_->x_r_) / map_->x_r_cm_ + map_->width / 2.0;
+    MX grid_y = (y - map_->y_r_) / map_->y_r_cm_ + map_->height / 2.0;
+    
+    // Create interpolant function
+    std::vector<double> grid_x_vals(map_->width);
+    std::vector<double> grid_y_vals(map_->height);
+    std::vector<double> grid_values(map_->width * map_->height);
+    
+    for (int i = 0; i < map_->width; i++) grid_x_vals[i] = i;
+    for (int i = 0; i < map_->height; i++) grid_y_vals[i] = i;
+    
+    for (int iy = 0; iy < map_->height; iy++) {
+        for (int ix = 0; ix < map_->width; ix++) {
+            uint8_t val = map_->grid[iy * map_->width + ix];
+            grid_values[iy * map_->width + ix] = (val > 150) ? -1.0 : 1.0;
+        }
+    }
+    
+    Function interpolant = casadi::interpolant("barrier_interp", "linear", 
+                                             {grid_x_vals, grid_y_vals}, 
+                                             grid_values);
+    
+    return interpolant(std::vector<MX>{grid_x, grid_y})[0];
 }
 
 MX VehicleModel::skew_symmetric(const MX& a) const {
@@ -250,8 +281,8 @@ void VehicleModel::calculate_linear() {
     // Fill A_ as needed for your system
 }
 
-NonlinearMPC::NonlinearMPC(const VehicleModel& model, int N, double dt)
-    : model_(model), N_(N), dt_(dt), nx_(12), nu_(8), prev_sol_(std::nullopt) {
+NonlinearMPC::NonlinearMPC(const VehicleModel& model, int N, double dt, MX eps)
+    : model_(model), N_(N), dt_(dt), nx_(12), nu_(8), prev_sol_(std::nullopt), eps_(eps) {
     setup_optimization();
 }
 
@@ -318,8 +349,8 @@ void NonlinearMPC::setup_optimization() {
     external_options["jit_options"] = Dict{{"flags", "-O3"}};
     Function dynamics_func("dynamics_func", {eta_sym, nu_sym, u_sym}, {xdot}, external_options);
 
-    if (!std::ifstream("libdynamics_func2.so")) {
-        std::cout << "Generating libdynamics_func2.so...";
+    if (!std::ifstream("libdynamics_func.so")) {
+        std::cout << "Generating libdynamics_func.so...";
         // Generate derivatives explicitly
         Function jac_dynamics = dynamics_func.jacobian();
         Function grad_dynamics = dynamics_func.forward(1);
@@ -330,20 +361,33 @@ void NonlinearMPC::setup_optimization() {
         // cg_options["generate_forward"] = true;
         // cg_options["generate_reverse"] = true;
         
-        CodeGenerator cg("libdynamics_func2", cg_options);
+        CodeGenerator cg("libdynamics_func", cg_options);
         cg.add(dynamics_func);
         cg.add(jac_dynamics);
         cg.add(grad_dynamics);
         cg.generate();
 
-        std::system ("gcc -fPIC -shared -O3 libdynamics_func2.c -o libdynamics_func2.so");
+        std::system ("gcc -fPIC -shared -O3 libdynamics_func.c -o libdynamics_func.so");
     }
-    dynamics_func = external("dynamics_func", "./libdynamics_func2.so", external_options);
+    dynamics_func = external("dynamics_func", "./libdynamics_func.so", external_options);
 
-    // Barrier function (will be implemented separately)
-    MX x_sym = MX::sym("x");
-    MX y_sym = MX::sym("y");
-    Function barrier_func = external("barrier_func", "./barrier.so");
+    // // Barrier function (will be implemented separately)
+    // MX x_sym = MX::sym("x");
+    // MX y_sym = MX::sym("y");
+    // Function barrier_func = Function::callback(
+    //     "barrier_func",                         // Name of this callback
+    //     { x_sym, y_sym },                       // Input MX symbols
+    //     { MX::zeros(1,1) },                     // Dummy “template” output MX (1×1)
+    //     // Now the C++ lambda that implements it:
+    //     [this](const std::vector<DM>& in)->std::vector<DM> {
+    //         // Call your C++ member function:
+    //         float h = this->model_.barrier_function(
+    //                     static_cast<float>(in[0].scalar()),
+    //                     static_cast<float>(in[1].scalar()));
+    //         // Return a single‐entry DM containing h:
+    //         return { DM(h) };
+    //     }
+    // );
 
     MX Q = MX::diag(MX::vertcat({2.0, 2.0, 2.0, 1.0, 1.0, 1.0,
                                     0.1, 0.1, 0.1, 0.1, 0.1, 0.1}));
@@ -368,15 +412,25 @@ void NonlinearMPC::setup_optimization() {
         MX x_pos = eta_k(0);
         MX y_pos = eta_k(1);
         
-        // Get barrier function value
-        MX h_val = barrier_func(std::vector<MX>{x_pos, y_pos})[0];
-        
-        // Gradient approximation (finite difference)
-        MX eps = 0.01;
-        MX h_val_dx = barrier_func(std::vector<MX>{x_pos + eps, y_pos})[0];
-        MX h_val_dy = barrier_func(std::vector<MX>{x_pos, y_pos + eps})[0];
-        MX h_dx = (h_val_dx - h_val) / eps;
-        MX h_dy = (h_val_dy - h_val) / eps;
+        // // Get barrier function value
+        // MX h_val = barrier_func(std::vector<MX>{x_pos, y_pos})[0];
+
+        // MX h_val_dx = barrier_func(std::vector<MX>{x_pos + eps, y_pos})[0];
+        // MX h_val_dy = barrier_func(std::vector<MX>{x_pos, y_pos + eps})[0];
+        // MX h_dx = (h_val_dx - h_val) / eps;
+        // MX h_dy = (h_val_dy - h_val) / eps;
+        MX h_val = MX(1.0);
+        MX h_dx = MX(0.0);
+        MX h_dy = MX(0.0);
+
+        if (model_.has_map()) {
+            // Use the same variables but assign new values
+            h_val = model_.barrier_function_mx(x_pos, y_pos);
+            MX h_val_dx = model_.barrier_function_mx(x_pos + eps_, y_pos);
+            MX h_val_dy = model_.barrier_function_mx(x_pos, y_pos + eps_);
+            h_dx = (h_val_dx - h_val) / eps_;
+            h_dy = (h_val_dy - h_val) / eps_;
+        }
 
         // Dynamics integration (RK4)
         MX k1 = dynamics_func({eta_k, nu_k, u_k})[0];
@@ -389,16 +443,16 @@ void NonlinearMPC::setup_optimization() {
         MX k4 = dynamics_func({eta_k + dt_ * k3(Slice(0, 6)),
                             nu_k + dt_ * k3(Slice(6, 12)),
                             u_k})[0];
-        
+
         MX x_next = X_(Slice(), k) + (dt_ / 6) * vertcat(
             k1(Slice(0, 6)) + 2 * k2(Slice(0, 6)) + 2 * k3(Slice(0, 6)) + k4(Slice(0, 6)),
             k1(Slice(6, 12)) + 2 * k2(Slice(6, 12)) + 2 * k3(Slice(6, 12)) + k4(Slice(6, 12))
         );
         opti_.subject_to(X_(Slice(), k + 1) == x_next);
-        
-        // ZCBF constraint: dh/dt + αh >= 0
-        MX dx_dt = nu_k(0);  // x velocity from body frame
-        MX dy_dt = nu_k(1);  // y velocity from body frame
+
+        // ZCBF constraint
+        MX dx_dt = nu_k(0);
+        MX dy_dt = nu_k(1);
         MX h_dot = h_dx*dx_dt + h_dy*dy_dt;
         opti_.subject_to(h_dot + alpha*h_val >= -safety_margin);
     }
