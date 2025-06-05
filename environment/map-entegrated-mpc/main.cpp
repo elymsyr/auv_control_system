@@ -1,126 +1,98 @@
+#include "MapController.h"
 #include "EnvironmentMap.h"
-#include <iostream>
-#include <cstdint>
-#include <cuda_runtime.h>
 #include "mpc.h"
+#include <iostream>
+#include <vector>
 
-void process_batches_with_slide(void* map, void** batches, int num_batches, float dx, float dy) {
-    // 1. Slide the grid by dx/dy
-    launch_slide_kernel(map, dx, dy);
+// Simple neural network simulator (would be replaced with actual NN)
+void simulate_neural_network(uint8_t* grid_data, int width, int height) {
+    std::cout << "Neural network processing grid of size: " 
+              << width << "x" << height << std::endl;
     
-    // 2. Update points from all batches
-    for(int i = 0; i < num_batches; ++i) {
-        launch_update_kernel(map, batches[i]);
+    // In a real implementation, this would run on GPU
+    std::vector<uint8_t> host_grid(width * height);
+    cudaMemcpy(host_grid.data(), grid_data, width * height * sizeof(uint8_t), 
+               cudaMemcpyDeviceToHost);
+    
+    // Simple analysis - find max value
+    uint8_t max_val = 0;
+    for (int i = 0; i < width * height; i++) {
+        if (host_grid[i] > max_val) max_val = host_grid[i];
     }
-}
-
-void fill_point_batch_with_random(void* batch, int grid_width, int grid_height) {
-    PointBatch* h_batch = static_cast<PointBatch*>(batch);
-    
-    // Allocate host memory for random data
-    int2* h_coords = new int2[h_batch->count];
-    uint8_t* h_values = new uint8_t[h_batch->count];
-    
-    // Generate random points (host side)
-    for(int i = 0; i < h_batch->count; ++i) {
-        h_coords[i].x = rand() % grid_width * 20;    // Random x ∈ [0, width-1]
-        h_coords[i].y = rand() % grid_height * 20;   // Random y ∈ [0, height-1]
-        h_values[i] = rand() % 256;             // Random value ∈ [0,255]
-        // std::cout << "Point " << i << ": (" 
-        //           << h_coords[i].x << ", " 
-        //           << h_coords[i].y << ") = " 
-        //           << static_cast<int>(h_values[i]) << std::endl;
-    }
-    
-    // Copy to device
-    cudaMemcpy(h_batch->coords_dev, h_coords, 
-               h_batch->count * sizeof(int2), cudaMemcpyHostToDevice);
-    cudaMemcpy(h_batch->values_dev, h_values,
-               h_batch->count * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    
-    // Cleanup host memory
-    delete[] h_coords;
-    delete[] h_values;
-}
-
-void initialize_test_pattern(void* map) {
-    launch_slide_kernel(map, 0, 0);
-    void* batch = create_point_batch(1);
-    
-    // Corrected: Remove 'struct' keyword
-    PointBatch* h_batch = static_cast<PointBatch*>(batch);
-    int2 center = make_int2(64, 64);
-    uint8_t value = 255;
-    
-    cudaMemcpy(h_batch->coords_dev, &center, sizeof(int2), cudaMemcpyHostToDevice);
-    cudaMemcpy(h_batch->values_dev, &value, sizeof(uint8_t), cudaMemcpyHostToDevice);
-    
-    launch_update_kernel(map, batch);
-    destroy_point_batch(batch);
-}
-
-void update_single_point(void* map, PointBatch* h_batch, float world_x, float world_y, uint8_t value) {
-    int2 coord = make_int2(static_cast<int>(world_x), static_cast<int>(world_y));
-    uint8_t val = value;
-    
-    // Copy to device
-    cudaMemcpy(h_batch->coords_dev, &coord, sizeof(int2), cudaMemcpyHostToDevice);
-    cudaMemcpy(h_batch->values_dev, &val, sizeof(uint8_t), cudaMemcpyHostToDevice);
-    
-    // Launch kernel
-    launch_update_kernel(map, h_batch);
+    std::cout << "Max grid value: " << static_cast<int>(max_val) << std::endl;
 }
 
 int main() {
     const int W = 129, H = 129;
     
-    // 1. Create and initialize map
-    EnvironmentMap* map = static_cast<EnvironmentMap*>(create_environment_map(129, 129));
+    // 1. Create controller
+    MapController controller(W, H);
     
-    void* batch_one = create_point_batch(1);
-    PointBatch* h_batch = static_cast<PointBatch*>(batch_one);
-
-    void* batch = create_point_batch(100);
-    fill_point_batch_with_random(batch, W, H);
-
-    update_single_point(map, h_batch, 322.0f, 123.0f, 255); // Update center point
-
-    // 2. Create test pattern
-    initialize_test_pattern(map);
-    launch_update_kernel(map, batch);
-    destroy_point_batch(batch);
-    save_grid_to_file(map, "test_initial.bin");
+    // 2. Create and fill batches
+    void* random_batch = create_point_batch(100);
+    MapController::fill_point_batch_with_random(random_batch, W, H);
     
-    // 3. Apply shift
-    const float dx = 56.0f, dy = 30.5f;
-    launch_slide_kernel(map, dx, dy);
-    save_grid_to_file(map, "test_shifted.bin");
+    void* sensor_batch = create_point_batch(150);
+    MapController::fill_point_batch_with_random(sensor_batch, W, H);
 
+    // 3. Update map with batches
+    void* batches[] = {random_batch, sensor_batch};
+    controller.process_batches_with_slide(batches, 2, 0, 0);
+    
+    // 4. Test single point update
+    controller.update_single_point(322.0f, 123.0f, 255);
+    
+    // 5. Test test pattern
+    controller.initialize_test_pattern();
+    controller.save_map("test_initial.bin");
+    
+    // 6. Test slide
+    controller.slide(56.0f, 30.5f);
+    controller.save_map("test_shifted.bin");
+    
+    // 7. Test neural network access
+    uint8_t* grid_device_ptr = controller.get_grid_device_ptr();
+    simulate_neural_network(grid_device_ptr, W, H);
+    
+    // 8. MPC integration test
     VehicleModel model("config.json");
-    bool running = true;
-    // Main control loop
     NonlinearMPC mpc(model, 20, 0.1);
-    while (running) {
-        // 1. Update map with sensor data
-        void* batch_one = create_point_batch(150);
-        // fill_point_batch_with_random(batch, W, H);
-        PointBatch* batch = static_cast<PointBatch*>(batch_one);
-        launch_update_kernel(map, batch);
-
+    
+    bool running = true;
+    int iteration = 0;
+    while (running && iteration < 3) {  // Limit to 3 iterations for testing
+        std::cout << "\n--- Control Cycle " << iteration + 1 << " ---" << std::endl;
+        
+        // Update with new sensor data
+        void* new_sensor_batch = create_point_batch(50);
+        MapController::fill_point_batch_with_random(new_sensor_batch, W, H);
+        launch_update_kernel(controller.get_map(), new_sensor_batch);
+        
+        // Process with neural network
+        simulate_neural_network(controller.get_grid_device_ptr(), W, H);
+        
+        // Solve MPC
         DM x0 = DM::zeros(12);
         DM x_ref = DM::repmat(DM::vertcat({10.8, 9.9, -6, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, 21);
-
         auto [control, trajectory] = mpc.solve(x0, x_ref);
         
-        // 4. Apply control and update map position
-        // apply_control(control);
-        launch_slide_kernel(map, dx, dy);
-
-        // 4. Cleanup
-        destroy_point_batch(batch_one);
-        destroy_environment_map(map);
+        std::cout << "MPC Control Output: " << control << std::endl;
+        
+        // Apply control (simulated)
+        float dx = 10.0f * static_cast<float>(iteration);
+        float dy = 5.0f * static_cast<float>(iteration);
+        controller.slide(dx, dy);
+        
+        // Cleanup
+        destroy_point_batch(new_sensor_batch);
+        iteration++;
     }
     
+    // Final cleanup
+    destroy_point_batch(random_batch);
+    destroy_point_batch(sensor_batch);
+    
+    std::cout << "MapController testing completed successfully." << std::endl;
     return 0;
 }
 
@@ -136,13 +108,14 @@ int main() {
 // # 3. Compile MPC code with CasADi
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c mpc.cpp -o mpc.o
 
+// # 3. Compile Map Controller code
+// g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c MapController.cpp -o MapController.o
+
 // # 4. Build barrier function as shared library
 // nvcc -arch=sm_75 -Xcompiler -fPIC -shared barrier.cu -o barrier.so
 
 // # 5. Link all objects
-// g++ -o main EnvironmentMap.o main.o mpc.o \
-//     -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" \
-//     -lcasadi -lipopt -lzmq -lcudart -L/usr/local/cuda/lib64
+// g++ -o main EnvironmentMap.o main.o mpc.o MapController.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lcasadi -lipopt -lzmq -lcudart -L/usr/local/cuda/lib64
 
 // # 6. Run
 // ./main
