@@ -7,33 +7,42 @@
 #include <cstdlib>
 #include <cmath>
 
+#define CUDA_CALL(call) { \
+    cudaError_t err = call; \
+    if (err != cudaSuccess) { \
+        std::cerr << "CUDA error at " << __FILE__ << ":" << __LINE__ \
+                  << ": " << cudaGetErrorString(err) << "\n"; \
+        exit(EXIT_FAILURE); \
+    } \
+}
+
 int main() {
     // Create environment map
     const int WIDTH = 129;
     const int HEIGHT = 129;
     EnvironmentMap map(WIDTH, HEIGHT);
     
-    // Initialize with test pattern
-    map.initializeTestPattern();
-    
-    // Add some obstacles
-    map.updateSinglePoint(0.0f, 0.0f, 122);  // Near vehicle
-    map.updateSinglePoint(10.0f, 10.0f, 122);  // Near vehicle
-    map.updateSinglePoint(30.0f, 30.0f, 122);  // Near vehicle
-    map.updateSinglePoint(100.0f, 100.0f, 122);  // Far away
-    map.updateSinglePoint(50.0f, 50.0f, 122);   // On path
-    map.updateSinglePoint(70.0f, 30.0f, 122);   // Off path
-    
-    // Save initial map
-    map.save("initial_map.bin");
-    std::cout << "Initial map saved to initial_map.bin\n";
+    std::cout << "After construction:\n";
+    map.print_grid_info();
     
     // Test neural network simulation
     {
         std::cout << "\n--- Neural Network Test ---\n";
+
+        // Add some obstacles
+        map.updateSinglePoint(0.0f, 0.0f, 122);  // Near vehicle
+        map.updateSinglePoint(10.0f, 10.0f, 122);  // Near vehicle
+        map.updateSinglePoint(30.0f, 30.0f, 122);  // Near vehicle
+        map.updateSinglePoint(100.0f, 100.0f, 122);  // Far away
+        map.updateSinglePoint(50.0f, 50.0f, 122);   // On path
+        map.updateSinglePoint(70.0f, 30.0f, 122);   // Off path
+        
+        // Save initial map
+        map.save("initial_map.bin");
+        std::cout << "Initial map saved to initial_map.bin\n";
         simulate_neural_network(map.getGridDevicePtr(), WIDTH, HEIGHT);
     }
-    
+
     // Test obstacle selection
     {
         std::cout << "\n--- Obstacle Selection Test ---\n";

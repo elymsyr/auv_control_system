@@ -29,9 +29,6 @@ public:
     // Neural network utilities
     uint8_t* getGridDevicePtr() const;
     void copyGridToHost(uint8_t* host_buffer) const;
-    
-    // Initialization & debugging
-    void initializeTestPattern();
     void save(const char* filename) const;
 
     // Obstacle selection
@@ -43,6 +40,9 @@ public:
     static class PointBatch* createPointBatch(int count);
     static void destroyPointBatch(class PointBatch* batch);
     static void fillPointBatchWithRandom(class PointBatch* batch, int grid_width, int grid_height);
+
+    void debug_grid_update(float world_x, float world_y);
+    void print_grid_info() const;
 
     // Public member variables for kernel access
     int width_;

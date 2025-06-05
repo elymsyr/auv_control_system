@@ -3,6 +3,15 @@
 #include <algorithm>
 #include <tuple>
 
+#define CUDA_CALL(call) { \
+    cudaError_t err = call; \
+    if (err != cudaSuccess) { \
+        std::cerr << "CUDA error at " << __FILE__ << ":" << __LINE__ \
+                  << ": " << cudaGetErrorString(err) << "\n"; \
+        exit(EXIT_FAILURE); \
+    } \
+}
+
 // Device function to compute point to line distance
 __device__ float point_to_line_distance(float px, float py, 
                                       float x1, float y1, 
@@ -90,19 +99,22 @@ __global__ void slidePhase2(EnvironmentMap* map) {
 
 __global__ void pointUpdateKernel(EnvironmentMap* map, PointBatch* batch) {
     unsigned tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= batch->count) return;
+    if (tid >= batch->count) return;  // MUST BE FIRST LINE!
 
     float2 coord = batch->coords_dev[tid];
     uint8_t val = batch->values_dev[tid];
 
-    int x_coor = static_cast<int>(roundf(
-        (coord.x - map->x_r_) / map->x_r_cm_ + map->width_ / 2.0f));
-    int y_coor = static_cast<int>(roundf(
-        (coord.y - map->y_r_) / map->y_r_cm_ + map->height_ / 2.0f));
+    // Calculate grid coordinates
+    int x_coor = static_cast<int>((coord.x - map->x_r_) / map->x_r_cm_ + map->width_ / 2.0f);
+    int y_coor = static_cast<int>((coord.y - map->y_r_) / map->y_r_cm_ + map->height_ / 2.0f);
 
+    // Validate coordinates BEFORE accessing memory
     if (x_coor >= 0 && x_coor < map->width_ && 
         y_coor >= 0 && y_coor < map->height_) {
-        map->grid_[y_coor * map->width_ + x_coor] = val;
+        int index = y_coor * map->width_ + x_coor;
+        if (index < map->width_ * map->height_) {
+            map->grid_[index] = val;
+        }
     }
 }
 
@@ -217,11 +229,6 @@ void EnvironmentMap::copyGridToHost(uint8_t* host_buffer) const {
     size_t grid_size = width_ * height_ * sizeof(uint8_t);
     cudaMemcpy(host_buffer, grid_, grid_size, cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
-}
-
-void EnvironmentMap::initializeTestPattern() {
-    slide(0, 0);
-    updateSinglePoint(64.0f, 64.0f, 255);
 }
 
 void EnvironmentMap::save(const char* filename) const {
@@ -361,4 +368,83 @@ void simulate_neural_network(uint8_t* grid_data, int width, int height) {
         if (host_grid[i] > max_val) max_val = host_grid[i];
     }
     std::cout << "Max grid value: " << static_cast<int>(max_val) << std::endl;
+}
+
+// Add to EnvironmentMap implementation
+void EnvironmentMap::debug_grid_update(float world_x, float world_y) {
+    // Calculate expected grid coordinates
+    int x_coor = static_cast<int>(roundf(
+        (world_x - x_r_) / x_r_cm_ + width_ / 2.0f));
+    int y_coor = static_cast<int>(roundf(
+        (world_y - y_r_) / y_r_cm_ + height_ / 2.0f));
+    
+    std::cout << "=== Grid Update Debug ===\n";
+    std::cout << "World coordinates: (" << world_x << ", " << world_y << ")\n";
+    std::cout << "x_r_: " << x_r_ << ", y_r_: " << y_r_ << "\n";
+    std::cout << "x_r_cm_: " << x_r_cm_ << ", y_r_cm_: " << y_r_cm_ << "\n";
+    std::cout << "Calculated grid coordinates: (" << x_coor << ", " << y_coor << ")\n";
+    
+    // Check if coordinates are valid
+    if (x_coor >= 0 && x_coor < width_ && y_coor >= 0 && y_coor < height_) {
+        std::cout << "Coordinates are within grid bounds\n";
+        
+        // Directly set the value using a debug kernel
+        uint8_t debug_value = 255;
+        
+        // Create a debug batch
+        PointBatch* debug_batch = createPointBatch(1);
+        float2 coord = make_float2(world_x, world_y);
+        
+        CUDA_CALL(cudaMemcpy(debug_batch->coords_dev, &coord, sizeof(float2), cudaMemcpyHostToDevice));
+        CUDA_CALL(cudaMemcpy(debug_batch->values_dev, &debug_value, sizeof(uint8_t), cudaMemcpyHostToDevice));
+        
+        // Run update kernel
+        const int blockSize = 256;
+        const int gridSize = (1 + blockSize - 1) / blockSize;
+        pointUpdateKernel<<<gridSize, blockSize>>>(this, debug_batch);
+        CUDA_CALL(cudaDeviceSynchronize());
+        
+        // Check if value was set
+        uint8_t grid_value;
+        size_t offset = y_coor * width_ + x_coor;
+        CUDA_CALL(cudaMemcpy(&grid_value, grid_ + offset, sizeof(uint8_t), cudaMemcpyDeviceToHost));
+        
+        std::cout << "Value at (" << x_coor << ", " << y_coor << "): " 
+                  << static_cast<int>(grid_value) << "\n";
+        
+        destroyPointBatch(debug_batch);
+    } else {
+        std::cout << "Coordinates are OUTSIDE grid bounds!\n";
+    }
+    std::cout << "========================\n";
+}
+
+void EnvironmentMap::print_grid_info() const {
+    std::cout << "\n=== Grid Information ===\n";
+    std::cout << "Dimensions: " << width_ << " x " << height_ << "\n";
+    std::cout << "World reference: (" << x_r_ << ", " << y_r_ << ")\n";
+    std::cout << "CM per cell: (" << x_r_cm_ << ", " << y_r_cm_ << ")\n";
+    std::cout << "Slide offset: (" << sx_ << ", " << sy_ << ")\n";
+    
+    // Check center value
+    size_t center_idx = (height_/2) * width_ + (width_/2);
+    uint8_t center_value;
+    CUDA_CALL(cudaMemcpy(&center_value, grid_ + center_idx, sizeof(uint8_t), cudaMemcpyDeviceToHost));
+    std::cout << "Center value: " << static_cast<int>(center_value) << "\n";
+    
+    // Check if grid is all zeros
+    uint8_t* h_grid = new uint8_t[width_ * height_];
+    CUDA_CALL(cudaMemcpy(h_grid, grid_, width_ * height_ * sizeof(uint8_t), cudaMemcpyDeviceToHost));
+    
+    bool all_zeros = true;
+    for (int i = 0; i < width_ * height_; i++) {
+        if (h_grid[i] != 0) {
+            all_zeros = false;
+            break;
+        }
+    }
+    
+    std::cout << "Grid is all zeros: " << (all_zeros ? "YES" : "NO") << "\n";
+    delete[] h_grid;
+    std::cout << "========================\n";
 }
