@@ -23,10 +23,9 @@ int main() {
     EnvironmentMap map(WIDTH, HEIGHT);
     
     std::cout << "After construction:\n";
-    map.print_grid_info();
     // map.save("initial_empty.bin");
 
-    {   
+    {
         std::cout << "\n--- Adding Single Points ---\n";
 
         map.updateSinglePoint(0.0f, 0.0f, 150.0f);
@@ -35,27 +34,7 @@ int main() {
         map.updateSinglePoint(385.0f, 240.0f, 150.0f);
         map.updateSinglePoint(500.0f, 100.0f, 150.0f);
         map.updateSinglePoint(1000.0f, 450.0f, 150.0f);
-
-        map.print_grid_info();
         map.save("initial_updated.bin");
-    }
-
-    {
-        std::cout << "\n--- Obstacle Selection Test ---\n";
-        
-        // Set velocity and reference
-        map.set_velocity(1.0f, 1.0f);  // Moving diagonally
-        map.set_x_ref(325.0f, 130.0f);    // Reference point
-        
-        // Select 3 obstacles
-        auto obstacles = map.obstacle_selection(5);
-        
-        std::cout << "Selected obstacles:\n";
-        for (size_t i = 0; i < obstacles.size(); i++) {
-            std::cout << "  Obstacle " << i+1 << ": (" 
-                      << std::fixed << std::setprecision(1) << obstacles[i].first
-                      << ", " << obstacles[i].second << ")\n";
-        }
     }
 
     // {
@@ -75,7 +54,7 @@ int main() {
 
     {
         std::cout << "\n--- Point Batch Test ---\n";
-        PointBatch* batch = EnvironmentMap::createPointBatch(2000);
+        PointBatch* batch = EnvironmentMap::createPointBatch(10000);
         EnvironmentMap::fillPointBatchWithRandom(batch, WIDTH, HEIGHT);
         map.updateWithBatch(batch);
         EnvironmentMap::destroyPointBatch(batch);
@@ -83,17 +62,17 @@ int main() {
     }
 
     {
-        map.set_velocity(100.0f, 100.0f);
-        map.set_x_ref(525.0f, 525.0f);
+        map.set_velocity(-50.0f, -50.0f);
+        map.set_x_ref(250.0f, 350.0f);
 
-        auto obstacles = map.obstacle_selection(50);
+        auto obstacles = map.obstacle_selection();
         std::cout << "Obstacles after sliding:\n";
         for (size_t i = 0; i < obstacles.size(); i++) {
             map.updateSinglePoint(obstacles[i].first, obstacles[i].second, 200);
         }
-        map.updateSinglePoint(525.0f, 525.0f, 255);
+        map.updateSinglePoint(250.0f, 350.0f, 255);
         map.updateSinglePoint(0.0f, 0.0f, 250);
-        map.updateSinglePoint(10.0f, 10.0f, 255);
+        map.updateSinglePoint(-100.0f, -100.0f, 255);
         map.save("initial_signed.bin");
     }
 

@@ -32,7 +32,7 @@ public:
     void save(const char* filename) const;
 
     // Obstacle selection
-    std::vector<std::pair<float, float>> obstacle_selection(int number_obs);
+    std::vector<std::pair<float, float>> obstacle_selection(int number_obs = 0);
     void set_x_ref(float x, float y);
     void set_velocity(float vx, float vy);
 
@@ -40,9 +40,7 @@ public:
     static class PointBatch* createPointBatch(int count);
     static void destroyPointBatch(class PointBatch* batch);
     static void fillPointBatchWithRandom(class PointBatch* batch, int grid_width, int grid_height);
-
     void debug_grid_update(float world_x, float world_y);
-    void print_grid_info() const;
 
     // Public member variables for kernel access
     int width_;
@@ -55,16 +53,15 @@ public:
     uint8_t *tempGrid_;
     float ref_x_ = 0.0f;
     float ref_y_ = 0.0f;
-    
+    float centre_move_factor_ = 10.0f;
+    float circle_radius_ = 1000.0f;
+    int number_obs_to_feed_ = 50;
+
 private:
     float round_;
     class PointBatch* single_batch_;
     float vx_ = 0.0f;
     float vy_ = 0.0f;
 };
-
-// Utility functions
-extern "C" float* calculate_xref(EnvironmentMap* map, int mission, int state);
-void simulate_neural_network(uint8_t* grid_data, int width, int height);
 
 #endif

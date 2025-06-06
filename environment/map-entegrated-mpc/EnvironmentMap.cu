@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <tuple>
 #include <stdio.h>
+#include <cfloat>
 
 #define CUDA_CALL(call) { \
     cudaError_t err = call; \
@@ -11,65 +12,6 @@
                   << ": " << cudaGetErrorString(err) << "\n"; \
         exit(EXIT_FAILURE); \
     } \
-}
-
-// Device function to compute point to line distance
-__device__ float point_to_line_distance(float px, float py, 
-                                      float x1, float y1, 
-                                      float x2, float y2) {
-    // Vector from point to line start
-    float dx = px - x1;
-    float dy = py - y1;
-    
-    // Vector representing the line
-    float line_dx = x2 - x1;
-    float line_dy = y2 - y1;
-    
-    // Length of line segment squared
-    float length_sq = line_dx * line_dx + line_dy * line_dy;
-    
-    // Calculate projection scalar
-    float t = (dx * line_dx + dy * line_dy) / (length_sq + 1e-6f);
-    t = fmaxf(0.0f, fminf(1.0f, t));  // Clamp to segment
-    
-    // Calculate closest point on line
-    float proj_x = x1 + t * line_dx;
-    float proj_y = y1 + t * line_dy;
-    
-    // Return distance to closest point
-    return sqrtf((px - proj_x) * (px - proj_x) + 
-                (py - proj_y) * (py - proj_y));
-}
-
-// Kernel for obstacle selection
-__global__ void obstacleSelectionKernel(uint8_t* grid, int width, int height, 
-                                      float current_x, float current_y,
-                                      float projected_x, float projected_y,
-                                      float x_r, float y_r, float x_r_cm, float y_r_cm,
-                                      float* dists, float2* coords, int* count, int max_candidates) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int idy = blockIdx.y * blockDim.y + threadIdx.y;
-    
-    if (idx >= width || idy >= height) return;
-    
-    int grid_idx = idy * width + idx;
-    if (grid[grid_idx] > 0) {  // Obstacle threshold TEST (200)
-        // Convert grid coordinates to world coordinates
-        float world_x = x_r + (idx - width/2.0f) * x_r_cm;
-        float world_y = y_r + (idy - height/2.0f) * y_r_cm;
-        
-        // Calculate distance to path
-        float dist = point_to_line_distance(world_x, world_y, 
-                                          current_x, current_y,
-                                          projected_x, projected_y);
-        
-        // Get position in candidate array
-        int pos = atomicAdd(count, 1);
-        if (pos < max_candidates) {
-            dists[pos] = dist;
-            coords[pos] = make_float2(world_x, world_y);
-        }
-    }
 }
 
 // Device functions
@@ -115,6 +57,176 @@ __global__ void pointUpdateKernel(
     if (x_coor >= 0 && x_coor < width && y_coor >= 0 && y_coor < height) {
         grid[y_coor * width + x_coor] = val;
     }
+}
+
+__global__ void obstacleSelectionKernel(
+    uint8_t* grid, int width, int height, 
+    float current_x, float current_y, float middle_x, float middle_y,
+    float x_r, float y_r, float x_r_cm, float y_r_cm,
+    float* output_dists, float2* output_coords,  float* output_prior,
+    int* output_count, int max_output,
+    float circle_radius, float centre_move_factor
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idy = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    if (idx >= width || idy >= height) return;
+    
+    int grid_idx = idy * width + idx;
+    if (grid[grid_idx] > 0) {
+        // Convert to world coordinates
+        float world_x = x_r + (idx - width/2.0f) * x_r_cm;
+        float world_y = y_r + (idy - height/2.0f) * y_r_cm;
+
+        float dx = world_x - current_x;
+        float dy = world_y - current_y;
+        float dist_to_current = sqrtf(dx*dx + dy*dy);
+
+        dx = world_x - middle_x;
+        dy = world_y - middle_y;
+        float dist_to_middle = sqrtf(dx*dx + dy*dy);
+
+        // Priority 1: Check if in circle
+        if (dist_to_current <= circle_radius) {
+            
+            // Add to output
+            int pos = atomicAdd(output_count, 1);
+            if (pos < max_output) {
+                output_dists[pos] = dist_to_current;
+                output_coords[pos] = make_float2(world_x, world_y);
+                output_prior[pos] = dist_to_middle * 0.2 + dist_to_current * 0.8;
+            }
+            return;
+        }
+    }
+}
+
+float2 move_to(float x1, float y1, float x2, float y2, float factor) {
+    // Calculate direction vector
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    // Compute the distance to the target point
+    float length = std::sqrt(dx * dx + dy * dy);
+    // Compute new point
+    float proj_x = x1 + (dx / length) * factor;
+    float proj_y = y1 + (dy / length) * factor;
+    return make_float2(proj_x, proj_y);
+}
+
+float distance(float x1, float y1, float x2, float y2) {
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+std::vector<std::pair<float, float>> EnvironmentMap::obstacle_selection(int number_obs) {
+    const int MAX_CANDIDATES = 10000;
+    const int TOP_K = number_obs > 0 ? number_obs : number_obs_to_feed_;
+
+    // Device memory allocations
+    float* d_dists;
+    float* d_prior;
+    float2* d_coords;
+    int* d_count;
+    
+    CUDA_CALL(cudaMalloc(&d_dists, MAX_CANDIDATES * sizeof(float)));
+    CUDA_CALL(cudaMalloc(&d_prior, MAX_CANDIDATES * sizeof(float)));
+    CUDA_CALL(cudaMalloc(&d_coords, MAX_CANDIDATES * sizeof(float2)));
+    CUDA_CALL(cudaMalloc(&d_count, sizeof(int)));
+    CUDA_CALL(cudaMemset(d_count, 0, sizeof(int)));
+    
+    float current_x = x_r_;
+    float current_y = y_r_;
+    float ref_x = ref_x_ - current_x;
+    float ref_y = ref_y_ - current_y;
+    float proj_x = current_x + vx_ * 5.0f;
+    float proj_y = current_y + vy_ * 5.0f;
+
+    if (distance(x_r_, y_r_, ref_x, ref_y) > 1000.0f) {
+        // Reset reference point if too far
+        float2 ref_new = move_to(x_r_, y_r_, ref_x, ref_y, 1000.0f);
+        ref_x = ref_new.x;
+        ref_y = ref_new.y;
+    }
+    if (distance(x_r_, y_r_, proj_x, proj_y) > 1000.0f) {
+        // Reset reference point if too far
+        float2 proj_new = move_to(x_r_, y_r_, proj_x, proj_y, 1000.0f);
+        proj_x = proj_new.x;
+        proj_y = proj_new.y;
+    }
+
+    float middle_x = (proj_x + ref_x) / 2.0f;
+    float middle_y = (proj_y + ref_y) / 2.0f;
+
+    if (middle_x > 0.0f || middle_y > 0.0f) {
+        // Move middle point towards the reference point
+        float2 new_current = move_to(current_x, current_y, middle_x, middle_y, centre_move_factor_);
+        current_x = new_current.x;
+        current_y = new_current.y;
+    }
+
+    // Launch obstacle selection kernel
+    dim3 threads(16, 16);
+    dim3 blocks((width_ + threads.x - 1) / threads.x,
+                (height_ + threads.y - 1) / threads.y);
+
+    obstacleSelectionKernel<<<blocks, threads>>>(
+        grid_, width_, height_,
+        current_x, current_y, middle_x, middle_y,
+        x_r_, y_r_, x_r_cm_, y_r_cm_,
+        d_dists, d_coords, d_prior, d_count, MAX_CANDIDATES, circle_radius_, centre_move_factor_
+    );
+    CUDA_CALL(cudaDeviceSynchronize());
+    
+    // Get candidate count
+    int h_count;
+    CUDA_CALL(cudaMemcpy(&h_count, d_count, sizeof(int), cudaMemcpyDeviceToHost));
+    h_count = min(h_count, MAX_CANDIDATES);
+    
+    // Early return if no obstacles
+    if (h_count == 0) {
+        std::vector<std::pair<float, float>> result(TOP_K, {10000.0f, 10000.0f});
+        CUDA_CALL(cudaFree(d_dists));
+        CUDA_CALL(cudaFree(d_coords));
+        CUDA_CALL(cudaFree(d_count));
+        CUDA_CALL(cudaFree(d_prior));
+        return result;
+    }
+    
+    // Copy candidates to host
+    std::vector<float> h_prior(h_count);
+    std::vector<float2> h_coords(h_count);
+    CUDA_CALL(cudaMemcpy(h_prior.data(), d_prior, h_count * sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CALL(cudaMemcpy(h_coords.data(), d_coords, h_count * sizeof(float2), cudaMemcpyDeviceToHost));
+    
+    // Create index array and sort by distance to projected point
+    std::vector<int> indices(h_count);
+    for (int i = 0; i < h_count; ++i) indices[i] = i;
+    
+    std::sort(indices.begin(), indices.end(), [&](int a, int b) {
+        return h_prior[a] < h_prior[b];
+    });
+    
+    // Prepare results with top K closest obstacles
+    std::vector<std::pair<float, float>> result;
+    int num_to_return = std::min(TOP_K, h_count);
+    for (int i = 0; i < num_to_return; ++i) {
+        int idx = indices[i];
+        result.push_back({h_coords[idx].x, h_coords[idx].y});
+    }
+    
+    // Pad with default values if needed
+    for (int i = num_to_return; i < TOP_K; ++i) {
+        result.push_back({10000.0f, 10000.0f});
+    }
+    
+    // Cleanup
+    CUDA_CALL(cudaFree(d_dists));
+    CUDA_CALL(cudaFree(d_coords));
+    CUDA_CALL(cudaFree(d_count));
+    CUDA_CALL(cudaFree(d_prior));
+
+    return result;
 }
 
 // PointBatch management
@@ -252,123 +364,6 @@ void EnvironmentMap::set_x_ref(float x, float y) {
     ref_y_ = y;
 }
 
-std::vector<std::pair<float, float>> EnvironmentMap::obstacle_selection(int number_obs) {
-    const int MAX_CANDIDATES = 10000;
-    
-    // Device memory for candidates
-    float* d_dists;
-    float2* d_coords;
-    int* d_count;
-    
-    cudaMalloc(&d_dists, MAX_CANDIDATES * sizeof(float));
-    cudaMalloc(&d_coords, MAX_CANDIDATES * sizeof(float2));
-    cudaMalloc(&d_count, sizeof(int));
-    cudaMemset(d_count, 0, sizeof(int));
-    
-    // Calculate projected position
-    float current_x = x_r_;
-    float current_y = y_r_;
-    float projected_x, projected_y;
-    
-    if (ref_x_ != 0.0f || ref_y_ != 0.0f) {
-        projected_x = ref_x_;
-        projected_y = ref_y_;
-    } else {
-        projected_x = current_x + vx_ * 2.0f;  // 2 seconds lookahead
-        projected_y = current_y + vy_ * 2.0f;
-    }
-    
-    // Launch kernel
-    dim3 threads(16, 16);
-    dim3 blocks((width_ + threads.x - 1) / threads.x,
-                (height_ + threads.y - 1) / threads.y);
-    
-    obstacleSelectionKernel<<<blocks, threads>>>(
-        grid_, width_, height_,
-        current_x, current_y,
-        projected_x, projected_y,
-        x_r_, y_r_, x_r_cm_, y_r_cm_,
-        d_dists, d_coords, d_count, MAX_CANDIDATES
-    );
-    cudaDeviceSynchronize();
-    
-    // Copy count back to host
-    int h_count;
-    cudaMemcpy(&h_count, d_count, sizeof(int), cudaMemcpyDeviceToHost);
-    h_count = (h_count < MAX_CANDIDATES) ? h_count : MAX_CANDIDATES;
-    
-    // Copy candidate data
-    std::vector<float> h_dists(h_count);
-    std::vector<float2> h_coords(h_count);
-    
-    if (h_count > 0) {
-        cudaMemcpy(h_dists.data(), d_dists, h_count * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(h_coords.data(), d_coords, h_count * sizeof(float2), cudaMemcpyDeviceToHost);
-    }
-    
-    // Cleanup device memory
-    cudaFree(d_dists);
-    cudaFree(d_coords);
-    cudaFree(d_count);
-    
-    // Create vector of pairs for sorting
-    std::vector<std::pair<float, float2>> candidates;
-    for (int i = 0; i < h_count; i++) {
-        candidates.push_back({h_dists[i], h_coords[i]});
-    }
-    
-    // Sort by distance
-    std::sort(candidates.begin(), candidates.end(), 
-        [](const auto& a, const auto& b) {
-            return a.first < b.first;
-        });
-    
-    // Prepare selected obstacles
-    std::vector<std::pair<float, float>> selected;
-    int count = (candidates.size() < static_cast<size_t>(number_obs)) ? 
-                candidates.size() : number_obs;
-    
-    for (int i = 0; i < count; i++) {
-        selected.push_back({candidates[i].second.x, candidates[i].second.y});
-    }
-    
-    // Pad with distant obstacles if needed
-    for (int i = count; i < number_obs; i++) {
-        selected.push_back({10000.0f, 10000.0f});  // Far away
-    }
-    
-    return selected;
-}
-
-// Utility functions
-extern "C" float* calculate_xref(EnvironmentMap* map, int mission, int state) {
-    constexpr int LENGTH = 12;
-    float* result = static_cast<float*>(malloc(sizeof(float) * LENGTH));
-    if (!result) return nullptr;
-
-    for (int i = 0; i < LENGTH; ++i) {
-        if (i < 3) result[i] = 10.0f;
-        else if (i < 6) result[i] = 0.1f;
-        else if (i < 8) result[i] = 2.0f;
-        else if (i < 9) result[i] = 1.0f;
-        else result[i] = 0.0f;
-    }
-    return result;
-}
-
-void simulate_neural_network(uint8_t* grid_data, int width, int height) {
-    std::vector<uint8_t> host_grid(width * height);
-    cudaMemcpy(host_grid.data(), grid_data, 
-               width * height * sizeof(uint8_t), 
-               cudaMemcpyDeviceToHost);
-    
-    uint8_t max_val = 0;
-    for (int i = 0; i < width * height; i++) {
-        if (host_grid[i] > max_val) max_val = host_grid[i];
-    }
-    std::cout << "Max grid value: " << static_cast<int>(max_val) << std::endl;
-}
-
 // Add to EnvironmentMap implementation
 void EnvironmentMap::debug_grid_update(float world_x, float world_y) {
     // Calculate expected grid coordinates
@@ -417,28 +412,5 @@ void EnvironmentMap::debug_grid_update(float world_x, float world_y) {
     } else {
         std::cout << "Coordinates are OUTSIDE grid bounds!\n";
     }
-    std::cout << "========================\n";
-}
-
-void EnvironmentMap::print_grid_info() const {
-    std::cout << "\n=== Grid Information ===\n";
-    std::cout << "Dimensions: " << width_ << " x " << height_ << "\n";
-    std::cout << "World reference: (" << x_r_ << ", " << y_r_ << ")\n";
-    std::cout << "CM per cell: (" << x_r_cm_ << ", " << y_r_cm_ << ")\n";
-    std::cout << "Slide offset: (" << sx_ << ", " << sy_ << ")\n";
-    
-    uint8_t* h_grid = new uint8_t[width_ * height_];
-    copyGridToHost(h_grid);
-    
-    bool all_zeros = true;
-    for (int i = 0; i < width_ * height_; i++) {
-        if (h_grid[i] != 0) {
-            all_zeros = false;
-            break;
-        }
-    }
-    
-    std::cout << "Grid is all zeros: " << (all_zeros ? "YES" : "NO") << "\n";
-    delete[] h_grid;
     std::cout << "========================\n";
 }
