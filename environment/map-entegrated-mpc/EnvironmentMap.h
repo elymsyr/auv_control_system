@@ -53,14 +53,14 @@ public:
     float x_r_cm_, y_r_cm_;
     uint8_t *grid_;
     uint8_t *tempGrid_;
+    float ref_x_ = 0.0f;
+    float ref_y_ = 0.0f;
     
 private:
     float round_;
     class PointBatch* single_batch_;
     float vx_ = 0.0f;
     float vy_ = 0.0f;
-    float ref_x_ = 0.0f;
-    float ref_y_ = 0.0f;
 };
 
 // Utility functions

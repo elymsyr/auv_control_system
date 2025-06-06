@@ -6,17 +6,16 @@ from glob import glob
 def visualize_grids():
     # Get all bin files
     bin_files = glob('*.bin')
-    
     # Group files by title
     file_groups = {}
     for f in bin_files:
         # Extract title and subtitle
         parts = os.path.splitext(f)[0].split('_')
-        if len(parts) < 3:
+        if len(parts) < 2:
             continue
 
-        title = parts[1]
-        subtitle = '_'.join(parts[2:]) if len(parts) > 2 else 'no_subtitle'
+        title = parts[0]
+        subtitle = '_'.join(parts[1:]) if len(parts) > 1 else 'no_subtitle'
 
         if title not in file_groups:
             file_groups[title] = []

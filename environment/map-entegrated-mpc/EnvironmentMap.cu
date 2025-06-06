@@ -2,6 +2,7 @@
 #include <chrono>
 #include <algorithm>
 #include <tuple>
+#include <stdio.h>
 
 #define CUDA_CALL(call) { \
     cudaError_t err = call; \
@@ -52,7 +53,7 @@ __global__ void obstacleSelectionKernel(uint8_t* grid, int width, int height,
     if (idx >= width || idy >= height) return;
     
     int grid_idx = idy * width + idx;
-    if (grid[grid_idx] > 200) {  // Obstacle threshold
+    if (grid[grid_idx] > 0) {  // Obstacle threshold TEST (200)
         // Convert grid coordinates to world coordinates
         float world_x = x_r + (idx - width/2.0f) * x_r_cm;
         float world_y = y_r + (idy - height/2.0f) * y_r_cm;
@@ -72,49 +73,47 @@ __global__ void obstacleSelectionKernel(uint8_t* grid, int width, int height,
 }
 
 // Device functions
-__global__ void slidePhase1(EnvironmentMap* map, int inc_sx, int inc_sy) {
+__global__ void slidePhase1(uint8_t* grid, uint8_t* tempGrid, int width, int height, int sx, int sy) {
     int tx = blockIdx.x * blockDim.x + threadIdx.x;
     int ty = blockIdx.y * blockDim.y + threadIdx.y;
-    if (tx >= map->width_ || ty >= map->height_) return;
+    if (tx >= width || ty >= height) return;
 
-    int dst_idx = ty * map->width_ + tx;
-    int src_x = tx - inc_sx;
-    int src_y = ty - inc_sy;
+    int dst_idx = ty * width + tx;
+    int src_x = tx - sx;
+    int src_y = ty - sy;
 
-    if (src_x >= 0 && src_x < map->width_ && src_y >= 0 && src_y < map->height_) {
-        map->tempGrid_[dst_idx] = map->grid_[src_y * map->width_ + src_x];
+    if (src_x >= 0 && src_x < width && src_y >= 0 && src_y < height) {
+        tempGrid[dst_idx] = grid[src_y * width + src_x];
     } else {
-        map->tempGrid_[dst_idx] = 0;
+        tempGrid[dst_idx] = 0;
     }
 }
 
-__global__ void slidePhase2(EnvironmentMap* map) {
+__global__ void slidePhase2(uint8_t* grid, uint8_t* tempGrid, int width, int height) {
     int tx = blockIdx.x * blockDim.x + threadIdx.x;
     int ty = blockIdx.y * blockDim.y + threadIdx.y;
-    if (tx >= map->width_ || ty >= map->height_) return;
+    if (tx >= width || ty >= height) return;
 
-    int idx = ty * map->width_ + tx;
-    map->grid_[idx] = map->tempGrid_[idx];
+    int idx = ty * width + tx;
+    grid[idx] = tempGrid[idx];
 }
 
-__global__ void pointUpdateKernel(EnvironmentMap* map, PointBatch* batch) {
+__global__ void pointUpdateKernel(
+    uint8_t* grid, int width, int height,
+    float x_r, float y_r, float x_r_cm, float y_r_cm,
+    float2* coords_dev, uint8_t* values_dev, int count
+) {
     unsigned tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= batch->count) return;  // MUST BE FIRST LINE!
+    if (tid >= count) return;
 
-    float2 coord = batch->coords_dev[tid];
-    uint8_t val = batch->values_dev[tid];
+    float2 coord = coords_dev[tid];
+    uint8_t val = values_dev[tid];
 
-    // Calculate grid coordinates
-    int x_coor = static_cast<int>((coord.x - map->x_r_) / map->x_r_cm_ + map->width_ / 2.0f);
-    int y_coor = static_cast<int>((coord.y - map->y_r_) / map->y_r_cm_ + map->height_ / 2.0f);
+    int x_coor = static_cast<int>((coord.x - x_r) / x_r_cm + width / 2.0f);
+    int y_coor = static_cast<int>((coord.y - y_r) / y_r_cm + height / 2.0f);
 
-    // Validate coordinates BEFORE accessing memory
-    if (x_coor >= 0 && x_coor < map->width_ && 
-        y_coor >= 0 && y_coor < map->height_) {
-        int index = y_coor * map->width_ + x_coor;
-        if (index < map->width_ * map->height_) {
-            map->grid_[index] = val;
-        }
+    if (x_coor >= 0 && x_coor < width && y_coor >= 0 && y_coor < height) {
+        grid[y_coor * width + x_coor] = val;
     }
 }
 
@@ -138,9 +137,9 @@ void EnvironmentMap::fillPointBatchWithRandom(PointBatch* batch, int grid_width,
     uint8_t* h_values = new uint8_t[batch->count];
     
     for(int i = 0; i < batch->count; ++i) {
-        h_coords[i].x = rand() % (grid_width * 20);
-        h_coords[i].y = rand() % (grid_height * 20);
-        h_values[i] = rand() % 256;
+        h_coords[i].x = (rand() % (grid_width * 25 * 2)) - (grid_width * 25);
+        h_coords[i].y = (rand() % (grid_height * 25 * 2)) - (grid_height * 25);
+        h_values[i] = rand() % 1 + 50; // TEST
     }
     
     cudaMemcpy(batch->coords_dev, h_coords, 
@@ -184,30 +183,31 @@ void EnvironmentMap::slide(float dx, float dy) {
         yaw_ -= round_;
     }
     
-    int new_sx = static_cast<int>(x_ / 25.0f);
-    int new_sy = static_cast<int>(y_ / 25.0f);
-    int inc_sx = new_sx - sx_;
-    int inc_sy = new_sy - sy_;
+    // FIX: Remove 'int' declaration to update member variables
+    sx_ = static_cast<int>(x_ / x_r_cm_);
+    sy_ = static_cast<int>(y_ / y_r_cm_);
     
-    sx_ = new_sx;
-    sy_ = new_sy;
-    x_ -= sx_ * 25.0f;
-    y_ -= sy_ * 25.0f;
+    x_ -= sx_ * x_r_cm_;
+    y_ -= sy_ * y_r_cm_;
     
     dim3 threads(16, 16);
     dim3 blocks((width_ + threads.x - 1) / threads.x,
                 (height_ + threads.y - 1) / threads.y);
-    
-    slidePhase1<<<blocks, threads>>>(this, inc_sx, inc_sy);
+
+    slidePhase1<<<blocks, threads>>>(grid_, tempGrid_, width_, height_, sx_, sy_);
     cudaDeviceSynchronize();
-    slidePhase2<<<blocks, threads>>>(this);
+    slidePhase2<<<blocks, threads>>>(grid_, tempGrid_, width_, height_);
     cudaDeviceSynchronize();
 }
 
 void EnvironmentMap::updateWithBatch(PointBatch* batch) {
     const int blockSize = 256;
     const int gridSize = (batch->count + blockSize - 1) / blockSize;
-    pointUpdateKernel<<<gridSize, blockSize>>>(this, batch);
+    pointUpdateKernel<<<gridSize, blockSize>>>(
+        grid_, width_, height_,
+        x_r_, y_r_, x_r_cm_, y_r_cm_,
+        batch->coords_dev, batch->values_dev, batch->count
+    );
     cudaDeviceSynchronize();
 }
 
@@ -217,7 +217,7 @@ void EnvironmentMap::updateSinglePoint(float world_x, float world_y, uint8_t val
 
     cudaMemcpy(single_batch_->coords_dev, &coord, sizeof(float2), cudaMemcpyHostToDevice);
     cudaMemcpy(single_batch_->values_dev, &val, sizeof(uint8_t), cudaMemcpyHostToDevice);
-    
+
     updateWithBatch(single_batch_);
 }
 
@@ -235,8 +235,7 @@ void EnvironmentMap::save(const char* filename) const {
     uint8_t* h_grid = new uint8_t[width_ * height_];
     copyGridToHost(h_grid);
     
-    std::string test_filename = "test_" + std::string(filename);
-    std::ofstream file(test_filename, std::ios::binary);
+    std::ofstream file(filename, std::ios::binary);
     file.write(reinterpret_cast<char*>(h_grid), width_ * height_);
     file.close();
     
@@ -373,10 +372,8 @@ void simulate_neural_network(uint8_t* grid_data, int width, int height) {
 // Add to EnvironmentMap implementation
 void EnvironmentMap::debug_grid_update(float world_x, float world_y) {
     // Calculate expected grid coordinates
-    int x_coor = static_cast<int>(roundf(
-        (world_x - x_r_) / x_r_cm_ + width_ / 2.0f));
-    int y_coor = static_cast<int>(roundf(
-        (world_y - y_r_) / y_r_cm_ + height_ / 2.0f));
+    int x_coor = static_cast<int>((world_x - x_r_) / x_r_cm_ + width_ / 2.0f);
+    int y_coor = static_cast<int>((world_y - y_r_) / y_r_cm_ + height_ / 2.0f);
     
     std::cout << "=== Grid Update Debug ===\n";
     std::cout << "World coordinates: (" << world_x << ", " << world_y << ")\n";
@@ -401,7 +398,11 @@ void EnvironmentMap::debug_grid_update(float world_x, float world_y) {
         // Run update kernel
         const int blockSize = 256;
         const int gridSize = (1 + blockSize - 1) / blockSize;
-        pointUpdateKernel<<<gridSize, blockSize>>>(this, debug_batch);
+        pointUpdateKernel<<<gridSize, blockSize>>>(
+            grid_, width_, height_,
+            x_r_, y_r_, x_r_cm_, y_r_cm_,
+            debug_batch->coords_dev, debug_batch->values_dev, 1
+        );
         CUDA_CALL(cudaDeviceSynchronize());
         
         // Check if value was set
@@ -426,15 +427,8 @@ void EnvironmentMap::print_grid_info() const {
     std::cout << "CM per cell: (" << x_r_cm_ << ", " << y_r_cm_ << ")\n";
     std::cout << "Slide offset: (" << sx_ << ", " << sy_ << ")\n";
     
-    // Check center value
-    size_t center_idx = (height_/2) * width_ + (width_/2);
-    uint8_t center_value;
-    CUDA_CALL(cudaMemcpy(&center_value, grid_ + center_idx, sizeof(uint8_t), cudaMemcpyDeviceToHost));
-    std::cout << "Center value: " << static_cast<int>(center_value) << "\n";
-    
-    // Check if grid is all zeros
     uint8_t* h_grid = new uint8_t[width_ * height_];
-    CUDA_CALL(cudaMemcpy(h_grid, grid_, width_ * height_ * sizeof(uint8_t), cudaMemcpyDeviceToHost));
+    copyGridToHost(h_grid);
     
     bool all_zeros = true;
     for (int i = 0; i < width_ * height_; i++) {
