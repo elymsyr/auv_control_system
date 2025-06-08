@@ -22,11 +22,13 @@ class Publisher {
 protected:
     zmq::socket_t socket_;
     static constexpr const char* TOPIC = T::TOPIC;
-    bool is_bound = false;
+    bool bound_ = false;
+    std::mutex socket_mutex_;
     
 public:
     Publisher() : socket_(ZeroMQContext::get(), ZMQ_PUB) {
         socket_.set(zmq::sockopt::linger, 0);
+        // socket_.set(zmq::sockopt::sndhwm, 1000);
     }
 
     ~Publisher() {
@@ -35,39 +37,70 @@ public:
 
     // For direct publishers
     void bind(const std::string& endpoint) {
-        if(is_bound) throw std::runtime_error("Socket already bound");
-        socket_.bind(endpoint);
-        is_bound = true;
+        std::lock_guard<std::mutex> lock(socket_mutex_);
+        if(bound_) return;
+        try {
+            socket_.bind(endpoint);
+            bound_ = true;
+        } catch (const zmq::error_t& e) {
+            throw std::runtime_error("Bind failed: " + std::string(e.what()));
+        }
     }
 
     // For proxy-connected publishers
     void connect(const std::string& endpoint) {
-        if(is_bound) throw std::runtime_error("Socket already bound");
-        socket_.connect(endpoint);
+        std::lock_guard<std::mutex> lock(socket_mutex_);
+        if(bound_) return;
+        try {
+            socket_.connect(endpoint);
+            bound_ = true;
+        } catch (const zmq::error_t& e) {
+            throw std::runtime_error("Connect failed: " + std::string(e.what()));
+        }
     }
 
     void publish(const T& data) {
-        zmq::message_t topic_msg(TOPIC, strlen(TOPIC)); // Use C-string functions
-        zmq::message_t content_msg;
-        Serialize(content_msg, data);
+        std::lock_guard<std::mutex> lock(socket_mutex_);
+        if (!bound_) {
+            throw std::runtime_error("Publish failed: Socket not connected");
+        }
         
         try {
-            socket_.send(topic_msg, zmq::send_flags::sndmore);
-            socket_.send(content_msg, zmq::send_flags::dontwait);
-        }
-        catch(const zmq::error_t& e) {
-            if(e.num() != EAGAIN) {
-                throw std::runtime_error("Publish failed: " + std::string(e.what()));
+            zmq::message_t topic_msg(TOPIC, strlen(TOPIC));
+            zmq::message_t content_msg;
+            Serialize(content_msg, data);
+            
+            // Use non-blocking send to prevent hangs
+            if (!socket_.send(topic_msg, zmq::send_flags::sndmore | zmq::send_flags::dontwait)) {
+                throw std::runtime_error("Send topic failed: Would block");
             }
+            if (!socket_.send(content_msg, zmq::send_flags::dontwait)) {
+                throw std::runtime_error("Send content failed: Would block");
+            }
+        } catch (const zmq::error_t& e) {
+            if (e.num() == ETERM) {
+                // Context was terminated, normal during shutdown
+                return;
+            }
+            throw std::runtime_error("Publish failed: " + std::string(e.what()));
         }
     }
 
     void close() {
-        if(socket_.handle() != nullptr) {
-            socket_.close();
+        std::lock_guard<std::mutex> lock(socket_mutex_);
+        if (bound_) {
+            try {
+                // Set linger to 0 for immediate close
+                socket_.set(zmq::sockopt::linger, 0);
+                socket_.close();
+            } catch (...) {
+                // Ignore errors during close
+            }
+            bound_ = false;
         }
-        is_bound = false;
     }
+
+    bool is_bound() const { return bound_; }
 };
 
 // Base Subscriber
@@ -118,16 +151,24 @@ public:
     }
 
     void connect(const std::string& endpoint) {
-        socket_.connect(endpoint);
-        socket_.set(zmq::sockopt::subscribe, TOPIC);
-        running_ = true;
-        worker_thread_ = std::thread(&Subscriber::receiver_loop, this);
+        try {
+            socket_.connect(endpoint);
+            socket_.set(zmq::sockopt::subscribe, TOPIC);
+            running_ = true;
+            worker_thread_ = std::thread(&Subscriber::receiver_loop, this);
+        } catch (const zmq::error_t& e) {
+            throw std::runtime_error("Connect failed: " + std::string(e.what()));
+        }
     }
 
     // Get current data with thread-safe access
     T get_data() const {
-        std::lock_guard<std::mutex> lock(data_mutex_);
-        return data_;
+        try {
+            std::lock_guard<std::mutex> lock(data_mutex_);
+            return data_;
+        } catch (const std::exception& e) {
+            throw std::runtime_error("Get data failed: " + std::string(e.what()));
+        }
     }
 
     ~Subscriber() {
@@ -135,11 +176,21 @@ public:
     }
 
     void close() {
-        running_ = false;
-        if (worker_thread_.joinable()) {
-            worker_thread_.join();
+        try {
+            std::lock_guard<std::mutex> lock(data_mutex_);
+            running_ = false;
+            if (worker_thread_.joinable()) {
+                worker_thread_.join();
+            }
+            socket_.close();
+        } catch (const std::exception& e) {
+            std::cerr << "Mutex lock failed: " << e.what() << "\n";
         }
-        socket_.close();
+    }
+
+    bool is_running() const {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        return running_;
     }
 };
 

@@ -4,6 +4,7 @@
 #include "subsystem.h"
 #include "topics.hpp"
 #include "communication_system.h"
+#include "EnvironmentMap.h"
 #include <iostream>
 #include <chrono>
 #include <zmq_addon.hpp>
@@ -21,11 +22,17 @@ public:
     EnvironmentTopic env_state;
 
     MissionSystem(std::string name = "Mission", int runtime = 100, unsigned int system_code = 1);
-    void init() override;
+    void init_() override;
     void halt() override;
+
+private:
+    EnvironmentMap* map_ = nullptr;
 
 protected:
     void function() override;
+    void updateMap();
+    void updateMissionState();
+    void updateSignalState();
     void publish() override;
     std::mutex env_mtx;
 };

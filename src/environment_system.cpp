@@ -3,14 +3,17 @@
 EnvironmentSystem::EnvironmentSystem(std::string name, int runtime, unsigned int system_code)
     : Subsystem(name, runtime, system_code)
 {
-    env_pub_.bind("tcp://*:5560");
+    for (int i = 0; i < 20 && !env_pub_.is_bound(); ++i) {
+        env_pub_.bind("tcp://*:5560");
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 }
 
-void EnvironmentSystem::init() {
+void EnvironmentSystem::init_() {
 }
 
 void EnvironmentSystem::function() {
-    // notify if any error occured
+    std::shared_lock lock(topic_read_mutex);
     env_state.set();
 }
 
@@ -20,5 +23,10 @@ void EnvironmentSystem::publish() {
 }
 
 void EnvironmentSystem::halt() {
-    env_pub_.close();
+    try {
+        env_pub_.close();
+        initialized = false;
+    } catch (const std::exception& e) {
+        std::cerr << "Halt failed for " << name << ": " << e.what() << "\n";
+    }
 }

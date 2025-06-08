@@ -9,7 +9,8 @@ def main():
         mkdir -p build && cd build
 
         cmake -DBOOST_ROOT=$CONDA_PREFIX \
-            -DCMAKE_CXX_COMPILER=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-c++ \
+            -DCMAKE_CXX_COMPILER=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++ \
+            -DCMAKE_CUDA_HOST_COMPILER=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc \
             -Dcasadi_DIR=$CONDA_PREFIX/lib/cmake/casadi \
             -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
             -DCMAKE_BUILD_TYPE=Release ..

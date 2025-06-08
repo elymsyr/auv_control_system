@@ -30,26 +30,37 @@ MainSystem::MainSystem(std::string name, int runtime, unsigned int system_code, 
 }
 
 MainSystem::~MainSystem() {
-    {
+    try {
         std::lock_guard lk(mtx);
         shutdown_requested = true;
         cv_run.notify_one();
+    } catch (const std::exception& e) {
+        std::cerr << "Destructor (0) failed for " << name << ": " << e.what() << "\n";
     }
-    if (worker.joinable())
-        worker.join();
-    for (auto& [id, system] : systems_) {
-        system->stop();
-        system->halt();
+    try {
+        if (worker.joinable())
+            worker.join();
+        for (auto& [id, system] : systems_) {
+            system->stop();
+            system->halt();
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Destructor (1) failed for " << name << ": " << e.what() << "\n";
     }
-    proxy_ctx->close();
-    if (proxy_thread.joinable())
-        proxy_thread.join();
-    notify(3, 0);
-    state_pub_.close();
+    try {
+        proxy_ctx->close();
+        if (proxy_thread.joinable())
+            proxy_thread.join();
+        notify(3, 0);
+        state_pub_.close();
+    } catch (const std::exception& e) {
+        std::cerr << "Destructor (2) failed for " << name << ": " << e.what() << "\n";
+    }
 }
 
 void MainSystem::init_() {
     command_sub_.connect("tcp://localhost:8889");
+    initialized = true;
     start();
 }
 
@@ -67,60 +78,64 @@ void MainSystem::function() {
 }
 
 void MainSystem::parse_command(int system, int operation) {
-    std::cout << "Parsing command: system " << system << ", operation " << operation << "\n";
-    std::unique_lock lock(system_mtx);
-    if (system == 0) {
-        switch (static_cast<Operation>(operation)) {
-            case Operation::INIT:
-                for (auto& [id, system] : systems_) {
-                    system->init();
-                }
-                break;
-            case Operation::START:
-                for (auto& [id, system] : systems_) {
-                    system->start();
-                }
-                break;
-            case Operation::STOP:
-                for (auto& [id, system] : systems_) {
-                    system->stop();
-                }
-                break;
-            case Operation::HALT:
-                for (auto& [id, system] : systems_) {
-                    system->halt();
-                }
-                break;
-            default:
-                std::cerr << "Unknown operation\n";
-        }
-    }
-    else if (system == 6) {
-        std::cout << "Received a mission command\n";
-        return;
-    }
-    else {
-        auto it = systems_.find(static_cast<SystemID>(system));
-        if (it != systems_.end()) {
+    try {
+        std::cout << "Parsing command: system " << system << ", operation " << operation << "\n";
+        std::unique_lock lock(system_mtx);
+        if (system == 0) {
             switch (static_cast<Operation>(operation)) {
                 case Operation::INIT:
-                    it->second->init();
+                    for (auto& [id, system] : systems_) {
+                        system->init();
+                    }
                     break;
                 case Operation::START:
-                    it->second->start();
+                    for (auto& [id, system] : systems_) {
+                        system->start();
+                    }
                     break;
                 case Operation::STOP:
-                    it->second->stop();
+                    for (auto& [id, system] : systems_) {
+                        system->stop();
+                    }
                     break;
                 case Operation::HALT:
-                    it->second->halt();
+                    for (auto& [id, system] : systems_) {
+                        system->halt();
+                    }
                     break;
                 default:
                     std::cerr << "Unknown operation\n";
             }
-        } else {
-            std::cerr << "Unknown system ID\n";
         }
+        else if (system == 6) {
+            std::cout << "Received a mission command\n";
+            return;
+        }
+        else {
+            auto it = systems_.find(static_cast<SystemID>(system));
+            if (it != systems_.end()) {
+                switch (static_cast<Operation>(operation)) {
+                    case Operation::INIT:
+                        it->second->init();
+                        break;
+                    case Operation::START:
+                        it->second->start();
+                        break;
+                    case Operation::STOP:
+                        it->second->stop();
+                        break;
+                    case Operation::HALT:
+                        it->second->halt();
+                        break;
+                    default:
+                        std::cerr << "Unknown operation\n";
+                }
+            } else {
+                std::cerr << "Unknown system ID\n";
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Parsing failed for " << name << ": " << e.what() << "\n";
     }
 }
 
@@ -135,7 +150,7 @@ void MainSystem::start_proxy() {
         
         proxy_running_ = true;
         this->proxy_ctx = std::make_unique<zmq::context_t>(std::move(proxy_ctx));
-        zmq::proxy(frontend, backend);  // Use updated proxy function
+        zmq::proxy(frontend, backend);
     }
     catch (const zmq::error_t& e) {
         if (e.num() != ETERM) {
@@ -157,4 +172,5 @@ void MainSystem::start_test() {
 void MainSystem::halt() {
     stop();
     command_sub_.close();
+    initialized = false;
 }

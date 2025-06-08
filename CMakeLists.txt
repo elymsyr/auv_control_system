@@ -1,66 +1,85 @@
-cmake_minimum_required(VERSION 3.12)
-project(control_system LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.18)
 
-set(CMAKE_CXX_STANDARD 17)
+# ─── Force CUDA to Allow GCC 11 ────────────────────────────────────────────────
+# MUST be set before project() command
+set(CMAKE_CUDA_FLAGS "--allow-unsupported-compiler" CACHE STRING "" FORCE)
+
+project(control_system LANGUAGES CXX CUDA)
+
+# ─── Language Standards ─────────────────────────────────────────────────────────
+set(CMAKE_CXX_STANDARD        17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-set(OpenCV_INCLUDE_DIRS "/home/eren/miniconda3/envs/mppi/include/opencv4")
-set(OpenCV_LIBRARIES "/home/eren/miniconda3/envs/mppi/lib")
+set(CMAKE_CXX_EXTENSIONS      OFF)
 
-find_package(PkgConfig)
+set(CMAKE_CUDA_STANDARD        14)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+# ─── Dependencies ───────────────────────────────────────────────────────────────
+find_package(PkgConfig REQUIRED)
 pkg_check_modules(PC_ZeroMQ QUIET zmq)
+
 find_path(ZeroMQ_INCLUDE_DIR
-        NAMES zmq.hpp
-        PATHS ${PC_ZeroMQ_INCLUDE_DIRS}
-        )
+    NAMES zmq.hpp
+    PATHS ${PC_ZeroMQ_INCLUDE_DIRS}
+)
 find_library(ZeroMQ_LIBRARY
-        NAMES zmq
-        PATHS ${PC_ZeroMQ_LIBRARY_DIRS}
-        )
+    NAMES zmq
+    PATHS ${PC_ZeroMQ_LIBRARY_DIRS}
+)
 
-find_path(CASADI_INCLUDE_DIR casadi/casadi.hpp HINTS $ENV{CASADI_PREFIX}/include)
-find_library(CASADI_LIBRARY NAMES casadi HINTS ${CASADI_INCLUDE_DIR}/../lib $ENV{CASADI_PREFIX}/lib)
-set(CASADI_LIBRARIES ${CASADI_LIBRARY})
+find_package(CASADI   REQUIRED)
+find_package(Boost    1.65 REQUIRED COMPONENTS system)
+find_package(OpenCV REQUIRED COMPONENTS dnn)
+find_package(OpenSSL  REQUIRED)
+find_package(ZLIB     REQUIRED)
 
-# Find dependencies
-find_package(CASADI REQUIRED)
-find_package(Boost 1.65 REQUIRED COMPONENTS system)
-find_package(OpenSSL REQUIRED)
-find_package(ZLIB REQUIRED)
-
-# For CasADi versions that don't export namespace targets
-include_directories(control_system PRIVATE
+# ─── Include Directories ───────────────────────────────────────────────────────
+include_directories(
     include
     ${CASADI_INCLUDE_DIR}
-    ${OpenCV_INCLUDE_DIRS}
     ${ZeroMQ_INCLUDE_DIR}
     ${Boost_INCLUDE_DIRS}
     ${OPENSSL_INCLUDE_DIR}
     ${ZLIB_INCLUDE_DIRS}
 )
 
+# ─── Executable & Sources ───────────────────────────────────────────────────────
 add_executable(control_system
     src/main.cpp
-    src/control_system.cpp
     src/main_system.cpp
+    src/control_system.cpp
     src/environment_system.cpp
     src/motion_system.cpp
     src/mission_system.cpp
+    src/env_map.cu             # <-- CUDA source that defines EnvironmentMap
 )
 
+# ─── CUDA-specific compile options ─────────────────────────────────────────────
+# (This also ensures the --allow-unsupported-compiler flag if GCC9 not found)
+target_compile_options(control_system
+    PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:${CMAKE_CUDA_FLAGS}>
+)
+
+# Enable separable compilation (useful for larger CUDA projects)
+set_target_properties(control_system PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+)
+
+# ─── Link Libraries ────────────────────────────────────────────────────────────
 target_link_libraries(control_system PRIVATE
     ${CASADI_LIBRARIES}
     ${ZeroMQ_LIBRARY}
-    ${OpenCV_LIBRARIES}
     Boost::system
+    ${OpenCV_LIBS}
     OpenSSL::SSL
     OpenSSL::Crypto
     ZLIB::ZLIB
     pthread
-    dl  # CasADi often requires -ldl
+    dl
 )
 
-# Architecture-specific optimizations
+# ─── Optional: Arch-specific flags ─────────────────────────────────────────────
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
     target_compile_options(control_system PRIVATE 
         -march=armv8-a
@@ -72,17 +91,13 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
     )
 endif()
 
-# Optional: Print configuration summary
-message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "CasADi version: ${CASADI_VERSION}")
-message(STATUS "Boost version: ${Boost_VERSION}")
-message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
-message(STATUS "CASADI_INCLUDE_DIR: ${CASADI_INCLUDE_DIR}")
-message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
-message(STATUS "OPENSSL_INCLUDE_DIR: ${OPENSSL_INCLUDE_DIR}")
-message(STATUS "ZLIB_INCLUDE_DIRS: ${ZLIB_INCLUDE_DIRS}")
-
-# Install target (optional)
+# ─── Install ───────────────────────────────────────────────────────────────────
 install(TARGETS control_system
     RUNTIME DESTINATION bin
 )
+
+# ─── Summary ───────────────────────────────────────────────────────────────────
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "CUDA standard: ${CMAKE_CUDA_STANDARD}")
+message(STATUS "CUDA host compiler: ${CMAKE_CUDA_HOST_COMPILER}")

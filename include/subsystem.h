@@ -24,22 +24,45 @@ public:
         runtime(std::chrono::milliseconds(runtime)),
         system_code(system_code) {worker = std::thread([this]{ this->workerLoop(); });}
     ~Subsystem() {
-        {
+        try {
             std::lock_guard lk(mtx);
             shutdown_requested = true;
             cv_run.notify_one();
+        } catch (const std::exception& e) {
+            std::cerr << "Shutdown failed (0) for " << name << ": " << e.what() << "\n";
         }
-        if (worker.joinable())
-            worker.join();
-        notify(3, 0);
-        state_pub_.close();
+        try {
+            for (int i = 0; i < 10 && !worker.joinable(); ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            if (worker.joinable())
+                worker.join();
+        } catch (const std::exception& e) {
+            std::cerr << "Shutdown failed (1) for " << name << ": " << e.what() << "\n";
+        }
+        try {
+            notify(3, 0);
+            state_pub_.close();
+        } catch (const std::exception& e) {
+            std::cerr << "Shutdown failed (2) for " << name << ": " << e.what() << "\n";
+        }
     }
 
-    virtual void init() {
-        _init();
-        init_();
-        notify(0, 0);
-        std::cout << "init: " << name << "\n";
+    void init() {
+        if (initialized) {
+            std::cerr << "Subsystem " << name << " is already initialized.\n";
+            return;
+        }
+        try {
+            _init();
+            init_();
+            notify(0, 0);
+            initialized = true;
+            std::cout << "init: " << name << "\n";
+        } catch (const std::exception& e) {
+            std::cerr << "Init failed for " << name << ": " << e.what() << "\n";
+            throw;
+        }
     }
 
     virtual void init_() {};
@@ -47,40 +70,61 @@ public:
     virtual void _init() {
         try {
             state_pub_.connect("tcp://localhost:5555");
-        }
-        catch (const std::exception& e) {
+            for (int i = 0; i < 20 && !state_pub_.is_bound(); ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                state_pub_.connect("tcp://localhost:5555");
+            }
+        } catch (const std::exception& e) {
             std::cerr << "System "<< system_code << ": Failed to bind state publisher: " << e.what() << "\n";
             throw;
         }
     }
 
     virtual void start() {
-        std::cout << "start: " << name << "\n";
-        {
-          std::lock_guard lk(mtx);
-          run_requested = true;
+        try {
+            std::cout << "start: " << name << "\n";
+            {
+            std::lock_guard lk(mtx);
+            run_requested = true;
+            }
+            cv_run.notify_one();
+            notify(1, 0);
+        } catch (const std::exception& e) {
+            std::cerr << "Start failed for " << name << ": " << e.what() << "\n";
+            throw;
         }
-        cv_run.notify_one();
-        notify(1, 0);
     }
     virtual void stop() {
-        {
-          std::lock_guard lk(mtx);
-          run_requested = false;
+        try {
+            {
+            std::lock_guard lk(mtx);
+            run_requested = false;
+            }
+            cv_run.notify_one();
+            notify(2, 0);
+        } catch (const std::exception& e) {
+            std::cerr << "Stop failed for " << name << ": " << e.what() << "\n";
+            throw;
         }
-        cv_run.notify_one();
-        notify(2, 0);
     }
     virtual void halt() = 0;
 
     void notify(unsigned int process, uint8_t message) {
-        {
-            std::lock_guard<std::mutex> lock(system_state_mtx);
-            system_state.set(system_code, process, message);
+        try {
+            {
+                std::lock_guard<std::mutex> lock(system_state_mtx);
+                system_state.set(system_code, process, message);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "system_state.set failed for " << name << ": " << e.what() << "\n";
         }
-        {
-            std::shared_lock<std::shared_mutex> lock(topic_read_mutex);
-            state_pub_.publish(system_state);
+        try {
+            {
+                std::shared_lock<std::shared_mutex> lock(topic_read_mutex);
+                state_pub_.publish(system_state);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "state_pub_.publish(system_state) failed for " << name << ": " << e.what() << "\n";
         }
     }
 
@@ -89,25 +133,29 @@ private:
     virtual void publish() = 0;
 
     void workerLoop() {
-        std::unique_lock lk(mtx);
-        while (!shutdown_requested) {
-            cv_run.wait(lk, [&]{ return run_requested || shutdown_requested; });
-            
-            if (shutdown_requested) break;
-    
-            while (run_requested) {
-                lk.unlock();
+        try {
+            std::unique_lock lk(mtx);
+            while (!shutdown_requested) {
+                cv_run.wait(lk, [&]{ return run_requested || shutdown_requested; });
                 
-                // Main work cycle
-                auto start = std::chrono::high_resolution_clock::now();
-                function();
-                publish();
-                
-                // Sleep with periodic wakeup checks
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                
-                lk.lock();
+                if (shutdown_requested) break;
+        
+                while (run_requested) {
+                    lk.unlock();
+                    
+                    // Main work cycle
+                    auto start = std::chrono::high_resolution_clock::now();
+                    function();
+                    publish();
+                    
+                    // Sleep with periodic wakeup checks
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    
+                    lk.lock();
+                }
             }
+        } catch (const std::exception& e) {
+            std::cerr << "Worker loop failed for " << name << ": " << e.what() << "\n";
         }
     }
 
@@ -116,7 +164,7 @@ protected:
     std::thread worker;
     std::mutex  mtx, system_state_mtx;
     std::condition_variable cv_run, cv_halt;
-    bool run_requested = false, shutdown_requested = false;
+    bool initialized = false, run_requested = false, shutdown_requested = false;
 };
 
 #endif // SUBSYSTEM_H

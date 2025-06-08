@@ -9,8 +9,8 @@
 #include <zmq_addon.hpp>
 #include <any>
 #include <mutex>
-#include <opencv2/dnn.hpp>
-#include <opencv2/core.hpp>
+#include <opencv4/opencv2/dnn.hpp>
+#include <opencv4/opencv2/core.hpp>
 #include <vector>
 #include <stdexcept>
 
@@ -62,7 +62,7 @@ public:
     // Model model;
 
     MotionSystem(std::string name = "Motion", int runtime = 200, unsigned int system_code = 2);
-    void init() override;
+    void init_() override;
     void halt() override;
 
 protected:
