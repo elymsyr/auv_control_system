@@ -4,7 +4,7 @@ EnvironmentSystem::EnvironmentSystem(std::string name, int runtime, unsigned int
     : Subsystem(name, runtime, system_code)
 {
     for (int i = 0; i < 20 && !env_pub_.is_bound(); ++i) {
-        env_pub_.bind("tcp://*:5560");
+        env_pub_.bind("tcp://localhost:5560");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }

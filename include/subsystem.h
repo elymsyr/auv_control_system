@@ -68,15 +68,17 @@ public:
     virtual void init_() {};
 
     virtual void _init() {
-        try {
-            state_pub_.connect("tcp://localhost:5555");
-            for (int i = 0; i < 20 && !state_pub_.is_bound(); ++i) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        int attempts = 0;
+        while (attempts++ < 30) {
+            try {
                 state_pub_.connect("tcp://localhost:5555");
+                state_pub_.publish(StateTopic{});
+                break;
+            } 
+            catch (const zmq::error_t& e) {
+                std::cout << "state_pub init failed (" << attempts << ") for " << name << std::endl;
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
-        } catch (const std::exception& e) {
-            std::cerr << "System "<< system_code << ": Failed to bind state publisher: " << e.what() << "\n";
-            throw;
         }
     }
 

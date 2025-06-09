@@ -7,12 +7,12 @@ void ControlSystem::init_() {
     try
     {
         for (int i = 0; i < 20 && !motion_sub_.is_running() ; i++) {
-            motion_sub_.connect("tcp://localhost:5563");
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            motion_sub_.connect("tcp://localhost:5563");
         }
         for (int i = 0; i < 20 && !signal_sub_.is_running() ; i++) {
-            signal_sub_.connect("tcp://localhost:5562");
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            signal_sub_.connect("tcp://localhost:5562");
         }
     }
     catch(const std::exception& e)

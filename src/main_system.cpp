@@ -6,9 +6,10 @@ MainSystem::MainSystem(std::string name, int runtime, unsigned int system_code, 
     command_received.set();
     proxy_thread = std::thread([this] { start_proxy(); });
     int retries = 0;
-    while (!proxy_running_ && retries++ < 10) {
+    while (!proxy_running_ && retries++ < 50) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    if (!proxy_running_) throw std::runtime_error("Porxy Failed");
     for (const auto& [id, runtime] : system_configs_) {
         switch (id) {
             case SystemID::ENVIRONMENT:
@@ -59,7 +60,7 @@ MainSystem::~MainSystem() {
 }
 
 void MainSystem::init_() {
-    command_sub_.connect("tcp://localhost:8889");
+    command_sub_.connect("tcp://192.168.43.22:8889");
     initialized = true;
     start();
 }
@@ -145,12 +146,15 @@ void MainSystem::start_proxy() {
         zmq::socket_t frontend(proxy_ctx, ZMQ_XSUB);
         zmq::socket_t backend(proxy_ctx, ZMQ_XPUB);
         
-        frontend.bind("tcp://*:5555");
-        backend.bind("tcp://*:8888");
+        frontend.bind("tcp://localhost:5555");
+        backend.bind("tcp://localhost:8888");
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         
         proxy_running_ = true;
         this->proxy_ctx = std::make_unique<zmq::context_t>(std::move(proxy_ctx));
         zmq::proxy(frontend, backend);
+        return;
     }
     catch (const zmq::error_t& e) {
         if (e.num() != ETERM) {

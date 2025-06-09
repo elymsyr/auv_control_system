@@ -4,7 +4,7 @@ MotionSystem::MotionSystem(std::string name, int runtime, unsigned int system_co
     : mission_sub_(mission_state, mission_mtx), env_sub_(env_state, env_mtx), Subsystem(name, runtime, system_code) 
 {
     for (int i = 0; i < 20 && !motion_pub_.is_bound() ; i++) {
-        motion_pub_.bind("tcp://*:5563");
+        motion_pub_.bind("tcp://localhost:5563");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }

@@ -5,11 +5,11 @@ MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_
     : env_sub_(env_state, env_mtx), Subsystem(name, runtime, system_code) 
 {
     for (int i = 0; i < 20 && !mission_pub_.is_bound() ; i++) {
-        mission_pub_.bind("tcp://*:5561");
+        mission_pub_.bind("tcp://localhost:5561");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     for (int i = 0; i < 20 && !signal_pub_.is_bound() ; i++) {
-        signal_pub_.bind("tcp://*:5562");
+        signal_pub_.bind("tcp://localhost:5562");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     map_ = new EnvironmentMap(129, 129);
