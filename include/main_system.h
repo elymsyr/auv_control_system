@@ -32,9 +32,6 @@ class MainSystem : public Subsystem {
     SubscriberMain command_sub_;
     bool is_new_ = false;
     
-    std::thread proxy_thread;
-    std::unique_ptr<zmq::context_t> proxy_ctx;
-
     std::unordered_map<SystemID, std::unique_ptr<Subsystem>> systems_;
     std::unordered_map<SystemID, int> system_configs_;
 
@@ -43,21 +40,21 @@ class MainSystem : public Subsystem {
     CommandTopic command_received;
 
 public:
-    MainSystem(std::string name = "Main", int runtime = 100, unsigned int system_code = 0, std::unordered_map<SystemID, int> system_configs = { {SystemID::MISSION, 100}, {SystemID::CONTROL, 100}, {SystemID::MOTION, 100}, {SystemID::ENVIRONMENT, 50} });
+    MainSystem(std::string name = "Main", int runtime = 200, unsigned int system_code = 0, std::unordered_map<SystemID, int> system_configs = { {SystemID::MISSION, 100}, {SystemID::CONTROL, 100}, {SystemID::MOTION, 100}, {SystemID::ENVIRONMENT, 50} });
     ~MainSystem();
     void init_() override;
-    bool proxy_running_ = true;
     void start_test();
+    void waitForDestruction();
 
 private:
     void parse_command(int system, int operation); 
-    void start_proxy();
     void halt() override;
 
 protected:
     void function() override;
     void publish() override;
-    std::mutex command_mtx, system_mtx;
+    std::mutex command_mtx, system_mtx, keep_alive_mtx_;
+    std:: condition_variable keep_alive_cv_;
 };
 
 #endif // MAIN_H

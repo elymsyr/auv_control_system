@@ -262,6 +262,11 @@ public:
         }
         socket_.close();
     }
+
+    bool is_running() const {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        return running_;
+    }
 };
 
 #endif // COMMUNICATION_H

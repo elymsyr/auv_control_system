@@ -4,12 +4,7 @@ MainSystem::MainSystem(std::string name, int runtime, unsigned int system_code, 
     : command_sub_(command_received, command_mtx, is_new_), Subsystem(name, runtime, system_code), system_configs_(std::move(system_configs))
 {
     command_received.set();
-    proxy_thread = std::thread([this] { start_proxy(); });
-    int retries = 0;
-    while (!proxy_running_ && retries++ < 50) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-    if (!proxy_running_) throw std::runtime_error("Porxy Failed");
+    init();
     for (const auto& [id, runtime] : system_configs_) {
         switch (id) {
             case SystemID::ENVIRONMENT:
@@ -28,6 +23,7 @@ MainSystem::MainSystem(std::string name, int runtime, unsigned int system_code, 
                 throw std::runtime_error("Unknown system ID");
         }
     }
+    start();
 }
 
 MainSystem::~MainSystem() {
@@ -36,7 +32,7 @@ MainSystem::~MainSystem() {
         shutdown_requested = true;
         cv_run.notify_one();
     } catch (const std::exception& e) {
-        std::cerr << "Destructor (0) failed for " << name << ": " << e.what() << "\n";
+        std::cerr << "Shutdown failed (0) for " << name << ": " << e.what() << "\n";
     }
     try {
         if (worker.joinable())
@@ -46,23 +42,30 @@ MainSystem::~MainSystem() {
             system->halt();
         }
     } catch (const std::exception& e) {
-        std::cerr << "Destructor (1) failed for " << name << ": " << e.what() << "\n";
+        std::cerr << "Shutdown failed (1) for " << name << ": " << e.what() << "\n";
     }
     try {
-        proxy_ctx->close();
-        if (proxy_thread.joinable())
-            proxy_thread.join();
-        notify(3, 0);
-        state_pub_.close();
+        keep_alive_cv_.notify_one();
     } catch (const std::exception& e) {
-        std::cerr << "Destructor (2) failed for " << name << ": " << e.what() << "\n";
+        std::cerr << "Shutdown failed (2) for " << name << ": " << e.what() << "\n";
     }
+
+}
+
+void MainSystem::waitForDestruction() {
+    std::unique_lock<std::mutex> lk(keep_alive_mtx_);
+    keep_alive_cv_.wait(lk);
 }
 
 void MainSystem::init_() {
-    command_sub_.connect("tcp://192.168.43.22:8889");
+    int attempts = 0;
+    int retries = 100;
+    while (!command_sub_.is_running() && attempts < retries) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        command_sub_.connect("tcp://192.168.43.22:8889");
+        attempts++;
+    }
     initialized = true;
-    start();
 }
 
 void MainSystem::function() {
@@ -100,10 +103,8 @@ void MainSystem::parse_command(int system, int operation) {
                     }
                     break;
                 case Operation::HALT:
-                    for (auto& [id, system] : systems_) {
-                        system->halt();
-                    }
-                    break;
+                    std::cout << "HALT operation received. Shutting down program.\n";
+                    std::exit(0);
                 default:
                     std::cerr << "Unknown operation\n";
             }
@@ -125,9 +126,6 @@ void MainSystem::parse_command(int system, int operation) {
                     case Operation::STOP:
                         it->second->stop();
                         break;
-                    case Operation::HALT:
-                        it->second->halt();
-                        break;
                     default:
                         std::cerr << "Unknown operation\n";
                 }
@@ -138,30 +136,6 @@ void MainSystem::parse_command(int system, int operation) {
     } catch (const std::exception& e) {
         std::cerr << "Parsing failed for " << name << ": " << e.what() << "\n";
     }
-}
-
-void MainSystem::start_proxy() {
-    zmq::context_t proxy_ctx(1);
-    try {
-        zmq::socket_t frontend(proxy_ctx, ZMQ_XSUB);
-        zmq::socket_t backend(proxy_ctx, ZMQ_XPUB);
-        
-        frontend.bind("tcp://localhost:5555");
-        backend.bind("tcp://localhost:8888");
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        
-        proxy_running_ = true;
-        this->proxy_ctx = std::make_unique<zmq::context_t>(std::move(proxy_ctx));
-        zmq::proxy(frontend, backend);
-        return;
-    }
-    catch (const zmq::error_t& e) {
-        if (e.num() != ETERM) {
-            std::cerr << "Proxy error: " << e.what() << "\n";
-        }
-    }
-    proxy_running_ = false;
 }
 
 void MainSystem::publish() {}

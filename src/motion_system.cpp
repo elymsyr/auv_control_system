@@ -25,7 +25,7 @@ void MotionSystem::function() {
     std::array<double, 6> propeller = {static_cast<double>(rand() % 10), static_cast<double>(rand() % 10), static_cast<double>(rand() % 10), static_cast<double>(rand() % 10), static_cast<double>(rand() % 8), static_cast<double>(rand() % 8)};
     MotionTopic test;
     test.set(propeller);
-    std::shared_lock lock(topic_read_mutex);
+    std::lock_guard lk(mtx);
     motion_state.set(test);
 }
 

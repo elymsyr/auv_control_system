@@ -13,7 +13,7 @@ void EnvironmentSystem::init_() {
 }
 
 void EnvironmentSystem::function() {
-    std::shared_lock lock(topic_read_mutex);
+    std::lock_guard lk(mtx);
     env_state.set();
 }
 

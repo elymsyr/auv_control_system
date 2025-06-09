@@ -23,7 +23,7 @@ void MissionSystem::init_() {
 }
 
 void MissionSystem::function() {
-    std::shared_lock lock(topic_read_mutex);
+    std::lock_guard lk(mtx);
     signal_state.set();
     mission_state.set();
 }
