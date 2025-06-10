@@ -73,7 +73,7 @@ __global__ void obstacleSelectionKernel(
     if (idx >= width || idy >= height) return;
     
     int grid_idx = idy * width + idx;
-    if (grid[grid_idx] > 0) {
+    if (grid[grid_idx] > 0) { // TEST
         // Convert to world coordinates
         float world_x = x_r + (idx - width/2.0f) * x_r_cm;
         float world_y = y_r + (idy - height/2.0f) * y_r_cm;

@@ -29,17 +29,38 @@ int main() {
     // std::cout << "After construction:\n";
     // // map.save("initial_empty.bin");
 
-    // {
-    //     std::cout << "\n--- Adding Single Points ---\n";
+    {
+        std::cout << "\n--- Adding Single Points ---\n";
 
-    //     map.updateSinglePoint(0.0f, 0.0f, 150.0f);
-    //     map.updateSinglePoint(102.0f, 165.0f, 150.0f);
-    //     map.updateSinglePoint(302.0f, 120.0f, 150.0f);
-    //     map.updateSinglePoint(385.0f, 240.0f, 150.0f);
-    //     map.updateSinglePoint(500.0f, 100.0f, 150.0f);
-    //     map.updateSinglePoint(1000.0f, 450.0f, 150.0f);
-    //     map.save("initial_updated.bin");
-    // }
+        map.updateSinglePoint(0.0f, 0.0f, 150.0f);
+        map.updateSinglePoint(102.0f, 165.0f, 150.0f);
+        map.updateSinglePoint(220.0f, 165.0f, 150.0f);
+        map.updateSinglePoint(220.0f, 120.0f, 150.0f);
+        map.updateSinglePoint(220.0f, 220.0f, 150.0f);
+        map.updateSinglePoint(302.0f, 120.0f, 150.0f);
+        map.updateSinglePoint(385.0f, 240.0f, 150.0f);
+        map.updateSinglePoint(500.0f, 100.0f, 150.0f);
+        map.updateSinglePoint(1000.0f, 450.0f, 150.0f);
+        map.save("initial_updated.bin");
+    }
+
+    {
+        // Get obstacles from environment map
+        std::vector<std::pair<float, float>> obstacles = map.obstacle_selection(mpc.num_obstacles_);
+
+        // Convert to CasADi DM matrix
+        DM obs_dm = DM::zeros(2, 5);
+        for (int i = 0; i < 5; ++i) {
+            obs_dm(0, i) = obstacles[i].first;
+            obs_dm(1, i) = obstacles[i].second / 100;
+        }
+
+        DM current_state = DM::vertcat({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+        DM reference_trajectory = DM::repmat(DM::vertcat({10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, 21);
+
+        // Solve MPC with obstacles
+        auto [control, trajectory] = mpc.solve(current_state, reference_trajectory, obs_dm);
+    }
 
     // {
     //     std::cout << "\n--- Map Sliding Test ---\n";
@@ -79,7 +100,6 @@ int main() {
     //     map.updateSinglePoint(-100.0f, -100.0f, 255);
     //     map.save("initial_signed.bin");
     // }
-
     return 0;
 }
 
@@ -93,3 +113,5 @@ int main() {
 // ./main
 // rm -f *.o *.so main jit_* libdynamics_func*
 // python /home/eren/GitHub/ControlSystem/environment/map-entegrated-mpc/visualize.py
+
+// LD_DEBUG=libs 
