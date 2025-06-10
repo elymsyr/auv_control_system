@@ -6,6 +6,8 @@
 #include <chrono>
 #include <cstdlib>
 #include <cmath>
+#include "nlmpc.h"
+#include "vehicle_model.h"
 
 #define CUDA_CALL(call) { \
     cudaError_t err = call; \
@@ -21,21 +23,25 @@ int main() {
     const int WIDTH = 129;
     const int HEIGHT = 129;
     EnvironmentMap map(WIDTH, HEIGHT);
+    VehicleModel model("config.json", &map); 
+    NonlinearMPC mpc(model);
+
+    std::cout << model.has_map() << "\n";
     
-    std::cout << "After construction:\n";
-    // map.save("initial_empty.bin");
+    // std::cout << "After construction:\n";
+    // // map.save("initial_empty.bin");
 
-    {
-        std::cout << "\n--- Adding Single Points ---\n";
+    // {
+    //     std::cout << "\n--- Adding Single Points ---\n";
 
-        map.updateSinglePoint(0.0f, 0.0f, 150.0f);
-        map.updateSinglePoint(102.0f, 165.0f, 150.0f);
-        map.updateSinglePoint(302.0f, 120.0f, 150.0f);
-        map.updateSinglePoint(385.0f, 240.0f, 150.0f);
-        map.updateSinglePoint(500.0f, 100.0f, 150.0f);
-        map.updateSinglePoint(1000.0f, 450.0f, 150.0f);
-        map.save("initial_updated.bin");
-    }
+    //     map.updateSinglePoint(0.0f, 0.0f, 150.0f);
+    //     map.updateSinglePoint(102.0f, 165.0f, 150.0f);
+    //     map.updateSinglePoint(302.0f, 120.0f, 150.0f);
+    //     map.updateSinglePoint(385.0f, 240.0f, 150.0f);
+    //     map.updateSinglePoint(500.0f, 100.0f, 150.0f);
+    //     map.updateSinglePoint(1000.0f, 450.0f, 150.0f);
+    //     map.save("initial_updated.bin");
+    // }
 
     // {
     //     std::cout << "\n--- Map Sliding Test ---\n";
@@ -52,45 +58,39 @@ int main() {
     //     }
     // }
 
-    {
-        std::cout << "\n--- Point Batch Test ---\n";
-        PointBatch* batch = EnvironmentMap::createPointBatch(10000);
-        EnvironmentMap::fillPointBatchWithRandom(batch, WIDTH, HEIGHT);
-        map.updateWithBatch(batch);
-        EnvironmentMap::destroyPointBatch(batch);
-        map.save("initial_filled.bin");
-    }
+    // {
+    //     std::cout << "\n--- Point Batch Test ---\n";
+    //     PointBatch* batch = EnvironmentMap::createPointBatch(10000);
+    //     EnvironmentMap::fillPointBatchWithRandom(batch, WIDTH, HEIGHT);
+    //     map.updateWithBatch(batch);
+    //     EnvironmentMap::destroyPointBatch(batch);
+    //     map.save("initial_filled.bin");
+    // }
 
-    {
-        map.set_velocity(-50.0f, -50.0f);
-        map.set_x_ref(250.0f, 350.0f);
+    // {
+    //     map.set_velocity(-50.0f, -50.0f);
+    //     map.set_x_ref(250.0f, 350.0f);
 
-        auto obstacles = map.obstacle_selection();
-        std::cout << "Obstacles after sliding:\n";
-        for (size_t i = 0; i < obstacles.size(); i++) {
-            map.updateSinglePoint(obstacles[i].first, obstacles[i].second, 200);
-        }
-        map.updateSinglePoint(250.0f, 350.0f, 255);
-        map.updateSinglePoint(0.0f, 0.0f, 250);
-        map.updateSinglePoint(-100.0f, -100.0f, 255);
-        map.save("initial_signed.bin");
-    }
+    //     auto obstacles = map.obstacle_selection();
+    //     std::cout << "Obstacles after sliding:\n";
+    //     for (size_t i = 0; i < obstacles.size(); i++) {
+    //         map.updateSinglePoint(obstacles[i].first, obstacles[i].second, 200);
+    //     }
+    //     map.updateSinglePoint(250.0f, 350.0f, 255);
+    //     map.updateSinglePoint(0.0f, 0.0f, 250);
+    //     map.updateSinglePoint(-100.0f, -100.0f, 255);
+    //     map.save("initial_signed.bin");
+    // }
 
     return 0;
 }
 
 // rm -f *.o *.so main jit_* libdynamics_func* *.bin
-
 // nvcc -arch=sm_75 -c EnvironmentMap.cu -o EnvironmentMap.o
-
 // nvcc -arch=sm_75 -dc -I"${CONDA_PREFIX}/include" main.cpp -o main.o
-
-// g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c mpc.cpp -o mpc.o
-
-// g++ -o main EnvironmentMap.o main.o mpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lcasadi -lipopt -lzmq -lcudart -L/usr/local/cuda/lib64
-
+// g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c nlmpc.cpp -o nlmpc.o
+// g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c vehicle_model.cpp -o vehicle_model.o
+// g++ -o main EnvironmentMap.o main.o vehicle_model.o nlmpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lcasadi -lipopt -lzmq -lcudart -L/usr/local/cuda/lib64
 // ./main
-
 // rm -f *.o *.so main jit_* libdynamics_func*
-
 // python /home/eren/GitHub/ControlSystem/environment/map-entegrated-mpc/visualize.py

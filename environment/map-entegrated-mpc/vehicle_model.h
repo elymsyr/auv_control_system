@@ -1,5 +1,5 @@
-#ifndef MPC_H
-#define MPC_H
+#ifndef VEHICLE_MODEL_H
+#define VEHICLE_MODEL_H
 
 #include <casadi/casadi.hpp>
 #include <nlohmann/json.hpp>
@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include "EnvironmentMap.h"
+#include "vehicle_model.h"
 
 using namespace casadi;
 using json = nlohmann::json;
@@ -27,9 +28,9 @@ public:
     MX get_M_inv() const;
     double get_p_front_mid_max() const;
     double get_p_rear_max() const;
-    bool has_map() const { return map_ != nullptr; }
-
+    bool has_map() const;
     EnvironmentMap* map_;
+
 private:
     void load_config(const std::string& path);
     void calculate_linear();
@@ -53,22 +54,4 @@ private:
     MX skew_m_, skew_I_, skew_A11_, skew_A22_;
 };
 
-class NonlinearMPC {
-public:
-    NonlinearMPC(const VehicleModel& model, int N = 20, double dt = 0.1, MX eps = MX(1e-3));
-    void reset_previous_solution();
-    std::pair<DM, DM> solve(const DM& x0, const DM& x_ref);
-
-private:
-    VehicleModel model_;
-    int N_, nx_, nu_;
-    double dt_;
-    Opti opti_;
-    MX X_, U_, eps_;
-    MX x0_param_, x_ref_param_;
-    std::optional<OptiSol> prev_sol_;
-
-    void setup_optimization();
-};
-
-#endif // MPC_H
+#endif // VEHICLE_MODEL_H
