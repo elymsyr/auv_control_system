@@ -6,12 +6,11 @@
 #include <fstream>
 #include <string>
 #include "vehicle_model.h"
-#include "EnvironmentMap.h"
 
 using namespace casadi;
 using json = nlohmann::json;
 
-VehicleModel::VehicleModel(const std::string& config_path, EnvironmentMap* map) {
+VehicleModel::VehicleModel(const std::string& config_path) {
     load_config(config_path);
     calculate_linear();
 }
@@ -106,7 +105,6 @@ MX VehicleModel::get_A_matrix() const { return A_; }
 MX VehicleModel::get_M_inv() const { return M_inv_; }
 double VehicleModel::get_p_front_mid_max() const { return p_front_mid_max_; }
 double VehicleModel::get_p_rear_max() const { return p_rear_max_; }
-bool VehicleModel::has_map() const { return map_ != nullptr; }
 
 void VehicleModel::load_config(const std::string& path) {
     std::ifstream f(path);

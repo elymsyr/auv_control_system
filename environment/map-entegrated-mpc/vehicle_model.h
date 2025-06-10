@@ -6,7 +6,6 @@
 #include <vector>
 #include <optional>
 #include <string>
-#include "EnvironmentMap.h"
 #include "vehicle_model.h"
 
 using namespace casadi;
@@ -14,7 +13,7 @@ using json = nlohmann::json;
 
 class VehicleModel {
 public:
-    explicit VehicleModel(const std::string& config_path, EnvironmentMap* map);
+    explicit VehicleModel(const std::string& config_path);
 
     MX barrier_function_mx(const MX& x, const MX& y) const;
     MX skew_symmetric(const MX& a) const;
@@ -29,7 +28,6 @@ public:
     double get_p_front_mid_max() const;
     double get_p_rear_max() const;
     bool has_map() const;
-    EnvironmentMap* map_;
 
 private:
     void load_config(const std::string& path);

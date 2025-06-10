@@ -23,10 +23,8 @@ int main() {
     const int WIDTH = 129;
     const int HEIGHT = 129;
     EnvironmentMap map(WIDTH, HEIGHT);
-    VehicleModel model("config.json", &map); 
+    VehicleModel model("config.json"); 
     NonlinearMPC mpc(model);
-
-    std::cout << model.has_map() << "\n";
     
     // std::cout << "After construction:\n";
     // // map.save("initial_empty.bin");
@@ -85,6 +83,7 @@ int main() {
     return 0;
 }
 
+// cd /home/eren/GitHub/ControlSystem/environment/map-entegrated-mpc
 // rm -f *.o *.so main jit_* libdynamics_func* *.bin
 // nvcc -arch=sm_75 -c EnvironmentMap.cu -o EnvironmentMap.o
 // nvcc -arch=sm_75 -dc -I"${CONDA_PREFIX}/include" main.cpp -o main.o
