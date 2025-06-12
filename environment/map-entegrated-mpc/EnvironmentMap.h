@@ -41,20 +41,20 @@ public:
     static void destroyPointBatch(class PointBatch* batch);
     static void fillPointBatchWithRandom(class PointBatch* batch, int grid_width, int grid_height);
     void debug_grid_update(float world_x, float world_y);
+    void gridToGlobal(int i, int j, float& x, float& y) const;
 
     // Public member variables for kernel access
     int width_;
     int height_;
-    float x_, y_, yaw_;
-    float x_r_, y_r_;
+    int x_, y_;
+    float x_r_, y_r_, r_m_, yaw_;
     int sx_, sy_;
-    float x_r_cm_, y_r_cm_;
     uint8_t *grid_;
     uint8_t *tempGrid_;
     float ref_x_ = 0.0f;
     float ref_y_ = 0.0f;
-    float centre_move_factor_ = 10.0f;
-    float circle_radius_ = 1000.0f;
+    float centre_move_factor_ = 0.0f;
+    float circle_radius_ = 10.0f;
     int number_obs_to_feed_ = 50;
 
 private:

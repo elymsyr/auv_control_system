@@ -89,7 +89,13 @@
         "__config": "cpp",
         "__nullptr": "cpp",
         "__tree": "cpp",
-        "target": "cpp"
+        "target": "cpp",
+        "cfloat": "cpp",
+        "filesystem": "cpp",
+        "locale": "cpp",
+        "ios": "cpp",
+        "__locale": "cpp",
+        "__string": "cpp"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }
