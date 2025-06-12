@@ -1,4 +1,4 @@
-#include "EnvironmentMap.h"
+#include "environment.h"
 #include <iostream>
 #include <vector>
 #include <iomanip>
@@ -8,7 +8,6 @@
 #include <cmath>
 #include "nlmpc.h"
 #include "vehicle_model.h"
-#include "AStar.h"
 
 #define CUDA_CALL(call) { \
     cudaError_t err = call; \
@@ -19,8 +18,8 @@
     } \
 }
 
-DM create_reference_from_path(const DM& current_state, const std::vector<std::pair<float, float>>& path, int horizon);
-DM pathToReference(const DM& current_state, Path path, const EnvironmentMap& map, int horizon);
+// DM create_reference_from_path(const DM& current_state, const std::vector<std::pair<float, float>>& path, int horizon);
+// DM pathToReference(const DM& current_state, Path path, const EnvironmentMap& map, int horizon);
 DM obstacles_to_dm(const std::vector<std::pair<float, float>>& obstacles);
 
 int main() {
@@ -33,8 +32,6 @@ int main() {
     EnvironmentMap map(WIDTH, HEIGHT);
     VehicleModel model("config.json"); 
     NonlinearMPC mpc(model, N);
-    AStar astar(WIDTH, HEIGHT);
-    astar.setGoal(ref_x, ref_y);
 
     // std::cout << "After construction:\n";
     // // map.save("initial_empty.bin");
@@ -57,7 +54,7 @@ int main() {
 
     DM x0 = DM::vertcat({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
     DM x_ref = DM::repmat(DM::vertcat({ref_x, ref_y, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, N+1);
-    map.set_x_ref(ref_x, ref_y);
+    map.set_ref(ref_x, ref_y);
     map.set_velocity(0.0f, 0.0f);
 
     int max_step = 20;
@@ -67,10 +64,6 @@ int main() {
         double eta2 = static_cast<double>(x0(1));
         map.updateSinglePoint(eta1, eta2, 155.0f);
         map.slide(static_cast<float>(eta1), static_cast<float>(eta2));
-        Path path = astar.findPath(map.getGridDevicePtr());
-        
-        x_ref = pathToReference(x0, path, map, N);
-        astar.freePath(path);
 
         std::vector<std::pair<float, float>> obstacles = map.obstacle_selection(mpc.num_obstacles_);
 
@@ -132,70 +125,71 @@ int main() {
     return 0;
 }
 
-DM create_reference_from_path(const DM& current_state, 
-                            const std::vector<std::pair<float, float>>& path,
-                            int horizon) {
-    DM x_ref = DM::zeros(12, horizon+1);
-    if (path.empty()) return x_ref;
+// DM create_reference_from_path(const DM& current_state, 
+//                             const std::vector<std::pair<float, float>>& path,
+//                             int horizon) {
+//     DM x_ref = DM::zeros(12, horizon+1);
+//     if (path.empty()) return x_ref;
     
-    double current_x = static_cast<double>(current_state(0));
-    double current_y = static_cast<double>(current_state(1));
+//     double current_x = static_cast<double>(current_state(0));
+//     double current_y = static_cast<double>(current_state(1));
     
-    // Find closest point on path
-    int closest_idx = 0;
-    double min_dist = std::numeric_limits<double>::max();
-    for (int i = 0; i < path.size(); ++i) {
-        double dx = current_x - path[i].first;
-        double dy = current_y - path[i].second;
-        double dist = dx*dx + dy*dy;
-        if (dist < min_dist) {
-            min_dist = dist;
-            closest_idx = i;
-        }
-    }
+//     // Find closest point on path
+//     int closest_idx = 0;
+//     double min_dist = std::numeric_limits<double>::max();
+//     for (int i = 0; i < path.size(); ++i) {
+//         double dx = current_x - path[i].first;
+//         double dy = current_y - path[i].second;
+//         double dist = dx*dx + dy*dy;
+//         if (dist < min_dist) {
+//             min_dist = dist;
+//             closest_idx = i;
+//         }
+//     }
     
-    // Create reference trajectory
-    int points_to_use = std::min(static_cast<int>(path.size()) - closest_idx, horizon+1);
-    for (int i = 0; i < points_to_use; ++i) {
-        int path_idx = closest_idx + i;
-        x_ref(0, i) = path[path_idx].first;
-        x_ref(1, i) = path[path_idx].second;
-    }
+//     // Create reference trajectory
+//     int points_to_use = std::min(static_cast<int>(path.size()) - closest_idx, horizon+1);
+//     for (int i = 0; i < points_to_use; ++i) {
+//         int path_idx = closest_idx + i;
+//         x_ref(0, i) = path[path_idx].first;
+//         x_ref(1, i) = path[path_idx].second;
+//     }
     
-    // Extend with last point if needed
-    if (points_to_use < horizon+1) {
-        for (int i = points_to_use; i <= horizon; ++i) {
-            x_ref(0, i) = path.back().first;
-            x_ref(1, i) = path.back().second;
-        }
-    }
+//     // Extend with last point if needed
+//     if (points_to_use < horizon+1) {
+//         for (int i = points_to_use; i <= horizon; ++i) {
+//             x_ref(0, i) = path.back().first;
+//             x_ref(1, i) = path.back().second;
+//         }
+//     }
     
-    return x_ref;
-}
+//     return x_ref;
+// }
 
-DM pathToReference(const DM& current_state, Path path, 
-                   const EnvironmentMap& map, int horizon) {
-    if (path.length == 0) {
-        // Return default reference if no path
-        return DM::repmat(DM::vertcat({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, horizon+1);
-    }
+// DM pathToReference(const DM& current_state, Path path, 
+//                    const EnvironmentMap& map, int horizon) {
+//     if (path.length == 0) {
+//         // Return default reference if no path
+//         std::cout << "No path found, returning default reference.\n";
+//         return DM::repmat(DM::vertcat({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, horizon+1);
+//     }
 
-    // Copy path to host
-    std::vector<int2> h_path(path.length);
-    CUDA_CALL(cudaMemcpy(h_path.data(), path.points, 
-                         path.length * sizeof(int2), cudaMemcpyDeviceToHost));
+//     // Copy path to host
+//     std::vector<int2> h_path(path.length);
+//     CUDA_CALL(cudaMemcpy(h_path.data(), path.points, 
+//                          path.length * sizeof(int2), cudaMemcpyDeviceToHost));
 
-    // Convert to global coordinates
-    std::vector<std::pair<float, float>> global_path;
-    for (int i = 0; i < path.length; i++) {
-        float x_global, y_global;
-        map.gridToGlobal(h_path[i].x, h_path[i].y, x_global, y_global);
-        global_path.push_back({x_global, y_global});
-    }
+//     // Convert to global coordinates
+//     std::vector<std::pair<float, float>> global_path;
+//     for (int i = 0; i < path.length; i++) {
+//         float x_global, y_global;
+//         map.gridToGlobal(h_path[i].x, h_path[i].y, x_global, y_global);
+//         global_path.push_back({x_global, y_global});
+//     }
 
-    // Create reference trajectory
-    return create_reference_from_path(current_state, global_path, horizon);
-}
+//     // Create reference trajectory
+//     return create_reference_from_path(current_state, global_path, horizon);
+// }
 
 // Convert obstacles to DM matrix
 DM obstacles_to_dm(const std::vector<std::pair<float, float>>& obstacles) {
@@ -209,12 +203,13 @@ DM obstacles_to_dm(const std::vector<std::pair<float, float>>& obstacles) {
 
 // cd /home/eren/GitHub/ControlSystem/environment/map-entegrated-mpc
 // rm -f *.o *.so jit_* libdynamics_func* *.bin
-// nvcc -arch=sm_75 -c EnvironmentMap.cu -o EnvironmentMap.o
-// nvcc -arch=sm_75 -c AStar.cu -o AStar.o
+// nvcc -arch=sm_75 -c environment_map.cu -o environment_map.o
+// nvcc -arch=sm_75 -c environment_astar.cu -o environment_astar.o
+// nvcc -arch=sm_75 -c environment_global.cu -o environment_global.o
 // nvcc -arch=sm_75 -dc -I"${CONDA_PREFIX}/include" main.cpp -o main.o
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c nlmpc.cpp -o nlmpc.o
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c vehicle_model.cpp -o vehicle_model.o
-// g++ -o main EnvironmentMap.o AStar.o main.o vehicle_model.o nlmpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lcasadi -lipopt -lzmq -lcudart -L/usr/local/cuda/lib64
+// g++ -o main environment_map.o environment_astar.o environment_global.o main.o vehicle_model.o nlmpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lcasadi -lipopt -lzmq -lcudart -L/usr/local/cuda/lib64
 // ./main
 // rm -f *.o *.so jit_* libdynamics_func*
 // python /home/eren/GitHub/ControlSystem/environment/map-entegrated-mpc/visualize.py

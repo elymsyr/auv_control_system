@@ -1,34 +1,100 @@
-#include <cmath>
-#include <vector>
+#include "environment.h"
+#include <chrono>
+#include <algorithm>
+#include <tuple>
+#include <stdio.h>
 #include <cuda_runtime.h>
-#include "AStar.h"
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
+#include <cfloat>
 
+// Map
+__global__ void slidePhase1(uint8_t* grid, uint8_t* tempGrid, int width, int height, int2 shift) {
+    int tx = blockIdx.x * blockDim.x + threadIdx.x;
+    int ty = blockIdx.y * blockDim.y + threadIdx.y;
+    if (tx >= width || ty >= height) return;
 
-#define CHECK_CUDA(call) { \
-    cudaError_t err = call; \
-    if (err != cudaSuccess) { \
-        fprintf(stderr, "CUDA error at %s:%d code=%d(%s)\n", \
-            __FILE__, __LINE__, err, cudaGetErrorString(err)); \
-        exit(EXIT_FAILURE); \
-    } \
+    int dst_idx = ty * width + tx;
+    int src_x = tx - shift.x;
+    int src_y = ty - shift.y;
+
+    if (src_x >= 0 && src_x < width && src_y >= 0 && src_y < height) {
+        tempGrid[dst_idx] = grid[src_y * width + src_x];
+    } else {
+        tempGrid[dst_idx] = 0;
+    }
 }
 
-AStar::AStar(int width, int height) 
-    : width_(width), height_(height) {
-    start_x_ = width / 2;
-    start_y_ = height / 2;
-    goal_x_ = width / 2;
-    goal_y_ = height / 2;
+__global__ void slidePhase2(uint8_t* grid, uint8_t* tempGrid, int width, int height) {
+    int tx = blockIdx.x * blockDim.x + threadIdx.x;
+    int ty = blockIdx.y * blockDim.y + threadIdx.y;
+    if (tx >= width || ty >= height) return;
 
-    CHECK_CUDA(cudaMalloc(&d_grid_, width_ * height_ * sizeof(Node)));
-    initializeGrid();
+    int idx = ty * width + tx;
+    grid[idx] = tempGrid[idx];
 }
 
-AStar::~AStar() {
-    CHECK_CUDA(cudaFree(d_grid_));
+__global__ void pointUpdateKernel(uint8_t* grid, int width, int height, float x_r, float y_r, float r_m, float2* coords_dev, uint8_t* values_dev, int count) {
+    unsigned tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= count) return;
+
+    float2 coord = coords_dev[tid];
+    uint8_t val = values_dev[tid];
+
+    int x_coor = static_cast<int>((coord.x - x_r) / r_m + width / 2.0f);
+    int y_coor = static_cast<int>((coord.y - y_r) / r_m + height / 2.0f);
+
+    if (x_coor >= 0 && x_coor < width && y_coor >= 0 && y_coor < height) {
+        grid[y_coor * width + x_coor] = val;
+    }
+}
+
+__global__ void singlePointUpdateKernel(uint8_t* grid, int width, int height, float x_r, float y_r, float r_m,float world_x, float world_y, uint8_t value) {
+    // Convert world coordinates to grid coordinates
+    float grid_x = (world_x - x_r) / r_m + width / 2.0f;
+    float grid_y = (world_y - y_r) / r_m + height / 2.0f;
+    
+    int x_coor = __float2int_rd(grid_x);
+    int y_coor = __float2int_rd(grid_y);
+
+    // Check bounds and update grid
+    if (x_coor >= 0 && x_coor < width && y_coor >= 0 && y_coor < height) {
+        int index = y_coor * width + x_coor;
+        grid[index] = value;
+    }
+}
+
+__global__ void obstacleSelectionKernel(uint8_t* grid, int width, int height, float wx, float wy, float* output_dists, float2* output_coords, int* output_count, int max_output, float circle_radius, float r_m_) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idy = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    if (idx >= width || idy >= height) return;
+    
+    int grid_idx = idy * width + idx;
+    int cx = width / 2;
+    int cy = height / 2;
+    float dx = (float)(idx - cx);
+    float dy = (float)(idy - cy);
+    float dist = sqrtf(dx * dx + dy * dy) * r_m_;
+    if (grid[grid_idx] >= 250 && (dist < circle_radius)) {
+        int pos = atomicAdd(output_count, 1);
+        if (pos < max_output) {
+            output_dists[pos] = dist;
+            output_coords[pos] = make_float2(wx + dx * r_m_, wy + dy * r_m_);
+        }
+        return;
+    }
+}
+
+// A*
+__device__ void atomicMinFloat(float* address, float val) {
+    int* address_as_i = (int*)address;
+    int old = *address_as_i;
+    int expected;
+    do {
+        expected = old;
+        float old_val = __int_as_float(expected);
+        float new_val = fminf(old_val, val);
+        old = atomicCAS(address_as_i, expected, __float_as_int(new_val));
+    } while (expected != old);
 }
 
 __global__ void initKernel(Node* grid, int width, int height) {
@@ -40,21 +106,12 @@ __global__ void initKernel(Node* grid, int width, int height) {
     Node* node = &grid[index];
     node->x = idx;
     node->y = idy;
-    node->g = sqrtf(powf(idy, 2) + powf(idx, 2));
+    node->g = 1e9;
     node->h = 0;
     node->f = 1e9;
     node->parent_x = -1;
     node->parent_y = -1;
     node->status = 0;
-}
-
-void AStar::initializeGrid() {
-    dim3 block(16, 16);
-    dim3 grid((width_ + block.x - 1) / block.x, 
-              (height_ + block.y - 1) / block.y);
-
-    initKernel<<<grid, block>>>(d_grid_, width_, height_);
-    CHECK_CUDA(cudaDeviceSynchronize());
 }
 
 __global__ void setGoalKernel(Node* grid, int width, int height, int goal_x, int goal_y) {
@@ -67,23 +124,9 @@ __global__ void setGoalKernel(Node* grid, int width, int height, int goal_x, int
     float dx = idx - goal_x;
     float dy = idy - goal_y;
     node->h = sqrtf(dx*dx + dy*dy);
-    node->f = node->g + node->h;
 }
 
-void AStar::setGoal(int x, int y) {
-    goal_x_ = x;
-    goal_y_ = y;
-
-    dim3 block(16, 16);
-    dim3 grid((width_ + block.x - 1) / block.x, 
-              (height_ + block.y - 1) / block.y);
-
-    setGoalKernel<<<grid, block>>>(d_grid_, width_, height_, goal_x_, goal_y_);
-    CHECK_CUDA(cudaDeviceSynchronize());
-}
-
-__global__ void aStarKernel(Node* grid, uint8_t* obstacles, int width, int height, 
-                            int start_x, int start_y, int goal_x, int goal_y) {
+__global__ void aStarKernel(Node* grid, uint8_t* obstacles, int width, int height, int start_x, int start_y, int goal_x, int goal_y) {
     extern __shared__ bool changed[];
     int index = threadIdx.x + threadIdx.y * blockDim.x;
     changed[index] = false;
@@ -109,7 +152,7 @@ __global__ void aStarKernel(Node* grid, uint8_t* obstacles, int width, int heigh
 
         int curr_idx = idy * width + idx;
         Node* curr = &grid[curr_idx];
-        if (curr->status != 1) continue; // only process open nodes
+        if (curr->status != 1) continue;
 
         if (idx == goal_x && idy == goal_y) {
             return; // goal reached
@@ -151,9 +194,7 @@ __global__ void aStarKernel(Node* grid, uint8_t* obstacles, int width, int heigh
     }
 }
 
-__global__ void computePathLength(Node* grid, int width, int height, 
-                                 int start_x, int start_y, int goal_x, int goal_y, 
-                                 int* length) {
+__global__ void computePathLength(Node* grid, int width, int height, int start_x, int start_y, int goal_x, int goal_y, int* length) {
     if (goal_x == start_x && goal_y == start_y) {
         *length = 1;
         return;
@@ -188,10 +229,7 @@ __global__ void computePathLength(Node* grid, int width, int height,
     *length = reached_start ? count : 0;
 }
 
-// Path reconstruction kernel
-__global__ void reconstructPath(Node* grid, int width, int height, 
-                               int start_x, int start_y, int goal_x, int goal_y, 
-                               int2* path, int length) {
+__global__ void reconstructPath(Node* grid, int width, int height, int start_x, int start_y, int goal_x, int goal_y, int2* path, int length) {
     if (length == 0) return;
 
     int current_x = goal_x;
@@ -208,50 +246,5 @@ __global__ void reconstructPath(Node* grid, int width, int height,
         Node node = grid[current_y * width + current_x];
         current_x = node.parent_x;
         current_y = node.parent_y;
-    }
-}
-
-
-Path AStar::findPath(uint8_t* obstacles) {
-    if (goal_x_ < 0 || goal_y_ < 0) return Path{nullptr, 0};
-
-    // Run A* kernel
-    dim3 block(16, 16);
-    dim3 grid((width_ + block.x - 1) / block.x, 
-              (height_ + block.y - 1) / block.y);
-    size_t shared_mem = block.x * block.y * sizeof(bool);
-    
-    aStarKernel<<<grid, block, shared_mem>>>(d_grid_, obstacles, width_, height_,
-        start_x_, start_y_, goal_x_, goal_y_);
-    CHECK_CUDA(cudaDeviceSynchronize());
-
-    // Compute path length
-    int* d_length;
-    CHECK_CUDA(cudaMalloc(&d_length, sizeof(int)));
-    computePathLength<<<1,1>>>(d_grid_, width_, height_, 
-                              start_x_, start_y_, goal_x_, goal_y_, d_length);
-    CHECK_CUDA(cudaDeviceSynchronize());
-
-    int length;
-    CHECK_CUDA(cudaMemcpy(&length, d_length, sizeof(int), cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaFree(d_length));
-
-    Path path_result = {nullptr, 0};
-    if (length <= 0) return path_result;
-
-    // Allocate and reconstruct path
-    CHECK_CUDA(cudaMalloc(&path_result.points, length * sizeof(int2)));
-    reconstructPath<<<1,1>>>(d_grid_, width_, height_, 
-                            start_x_, start_y_, goal_x_, goal_y_, 
-                            path_result.points, length);
-    CHECK_CUDA(cudaDeviceSynchronize());
-    
-    path_result.length = length;
-    return path_result;
-}
-
-void AStar::freePath(Path path) {
-    if (path.points) {
-        CHECK_CUDA(cudaFree(path.points));
     }
 }
