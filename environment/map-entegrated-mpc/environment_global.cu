@@ -47,7 +47,10 @@ __global__ void pointUpdateKernel(uint8_t* grid, int width, int height, float x_
     }
 }
 
-__global__ void singlePointUpdateKernel(uint8_t* grid, int width, int height, float x_r, float y_r, float r_m,float world_x, float world_y, uint8_t value) {
+__global__ void singlePointUpdateKernel(uint8_t* grid, int width, int height, 
+                                        float x_r, float y_r, float r_m,
+                                        float world_x, float world_y, 
+                                        uint8_t value, int radius) {
     // Convert world coordinates to grid coordinates
     float grid_x = (world_x - x_r) / r_m + width / 2.0f;
     float grid_y = (world_y - y_r) / r_m + height / 2.0f;
@@ -55,10 +58,28 @@ __global__ void singlePointUpdateKernel(uint8_t* grid, int width, int height, fl
     int x_coor = __float2int_rd(grid_x);
     int y_coor = __float2int_rd(grid_y);
 
-    // Check bounds and update grid
+    // Check bounds and update grid center
     if (x_coor >= 0 && x_coor < width && y_coor >= 0 && y_coor < height) {
         int index = y_coor * width + x_coor;
         grid[index] = value;
+    }
+
+    if (value >= 250) {
+        for (int di = -radius; di <= radius; di++) {
+            for (int dj = -radius; dj <= radius; dj++) {
+                // Calculate squared distance to avoid sqrt
+                if (di * di + dj * dj <= radius * radius) {
+                    int ni = y_coor + di;
+                    int nj = x_coor + dj;
+                    if (ni >= 0 && ni < height && nj >= 0 && nj < width) {
+                        int n_index = ni * width + nj;
+                        if (grid[n_index] < 250) {
+                            grid[n_index] = value;
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -107,24 +128,29 @@ __global__ void initKernel(Node* grid, int width, int height) {
     node->x = idx;
     node->y = idy;
     node->g = sqrtf(powf(idx - width / 2, 2) + powf(idy - height / 2, 2));
-    node->h = 0;
-    node->f = 0;
+    node->h = FLT_MAX;
+    node->f = node->h + node->g;
     node->parent_x = -1;
     node->parent_y = -1;
-    node->status = 0;
+    node->status = 1;
 }
 
-// __global__ void setGoalKernel(Node* grid, int width, int height, int goal_x, int goal_y) {
-//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-//     int idy = blockIdx.y * blockDim.y + threadIdx.y;
-//     if (idx >= width || idy >= height) return;
+__global__ void setGoalKernel(Node* grid, uint8_t* map, int width, int height, int goal_x, int goal_y) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idy = blockIdx.y * blockDim.y + threadIdx.y;
+    if (idx >= width || idy >= height) return;
 
-//     int index = idy * width + idx;
-//     Node* node = &grid[index];
-//     float dx = idx - goal_x;
-//     float dy = idy - goal_y;
-//     node->h = sqrtf(dx*dx + dy*dy);
-// }
+    int index = idy * width + idx;
+    Node* node = &grid[index];
+    if (map[index] >= 250) {
+        node->status = 0;
+        node->f = FLT_MAX;
+    } else {
+        node->status = 1;
+        node->h = sqrtf(powf(idx - goal_x, 2) + powf(idy - goal_y, 2));
+        node->f = node->g + node->h;
+    }
+}
 
 // __global__ void aStarKernel(Node* grid, uint8_t* obstacles, int width, int height, int start_x, int start_y, int goal_x, int goal_y) {
 //     extern __shared__ bool changed[];

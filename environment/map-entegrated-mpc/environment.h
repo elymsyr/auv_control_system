@@ -71,7 +71,7 @@ public:
     // astar
     // void updateGrid();
     // Path findPath();
-    void copyNodeToHost(float* host_buffer) const;
+    void copyNodeToHost(float* host_buffer, const char mode = 'f') const;
 
     int width_;
     int height_;
@@ -108,13 +108,13 @@ float distance(float x1, float y1, float x2, float y2);
 __global__ void slidePhase1(uint8_t* grid, uint8_t* tempGrid, int width, int height, int2 shift);
 __global__ void slidePhase2(uint8_t* grid, uint8_t* tempGrid, int width, int height);
 __global__ void pointUpdateKernel(uint8_t* grid, int width, int height, float x_r, float y_r, float r_m, float2* coords_dev, uint8_t* values_dev, int count);
-__global__ void singlePointUpdateKernel(uint8_t* grid, int width, int height, float x_r, float y_r, float r_m,float world_x, float world_y, uint8_t value);
+__global__ void singlePointUpdateKernel(uint8_t* grid, int width, int height, float x_r, float y_r, float r_m,float world_x, float world_y, uint8_t value, int radius = 5);
 __global__ void obstacleSelectionKernel(uint8_t* grid, int width, int height, float wx, float wy, float* output_dists, float2* output_coords, int* output_count, int max_output, float circle_radius, float r_m_);
 
 // astar kernel
 __device__ void atomicMinFloat(float* address, float val);
 __global__ void initKernel(Node* grid, int width, int height);
-// __global__ void setGoalKernel(Node* grid, int width, int height, int goal_x, int goal_y);
+__global__ void setGoalKernel(Node* grid, uint8_t* map, int width, int height, int goal_x, int goal_y);
 // __global__ void aStarKernel(Node* grid, uint8_t* obstacles, int width, int height, int start_x, int start_y, int goal_x, int goal_y);
 // __global__ void computePathLength(Node* grid, int width, int height, int start_x, int start_y, int goal_x, int goal_y, int* length);
 // __global__ void reconstructPath(Node* grid, int width, int height, int start_x, int start_y, int goal_x, int goal_y, int2* path, int length);

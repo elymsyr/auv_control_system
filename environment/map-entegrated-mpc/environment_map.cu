@@ -188,7 +188,9 @@ void EnvironmentMap::copyGridToHost(uint8_t* host_buffer) const {
 
 void EnvironmentMap::save(std::string name) const {
     std::string filename_grid = "grid_" + name + ".bin";
-    std::string filename_node = "node_" + name + ".bin";
+    std::string filename_node_f = "node_" + name + "_f.bin";
+    std::string filename_node_h = "node_" + name + "_h.bin";
+    std::string filename_node_g = "node_" + name + "_g.bin";
 
     size_t total_elements = width_ * height_;
     uint8_t* h_grid = new uint8_t[total_elements];
@@ -201,9 +203,17 @@ void EnvironmentMap::save(std::string name) const {
     delete[] h_grid;
 
     float* node_buffer = new float[total_elements];
-    copyNodeToHost(node_buffer);
+    
+    copyNodeToHost(node_buffer, 'f');
+    std::ofstream out(filename_node_f, std::ios::out | std::ios::binary);
+    out.write(reinterpret_cast<const char*>(node_buffer), total_elements * sizeof(float));
+    out.close();
 
-    std::ofstream out(filename_node, std::ios::out | std::ios::binary);
+    copyNodeToHost(node_buffer, 'h');
+    out.write(reinterpret_cast<const char*>(node_buffer), total_elements * sizeof(float));
+    out.close();
+
+    copyNodeToHost(node_buffer, 'g');
     out.write(reinterpret_cast<const char*>(node_buffer), total_elements * sizeof(float));
     out.close();
 
@@ -218,6 +228,15 @@ void EnvironmentMap::set_velocity(float vx, float vy) {
 void EnvironmentMap::set_ref(float ref_x, float ref_y) {
     ref_.x = ref_x;
     ref_.y = ref_y;
+    ref_x = (ref_x - world_position_.x) / r_m_ + (width_ / 2.0f);
+    ref_y = (ref_y - world_position_.y) / r_m_ + (height_ / 2.0f);
+    ref_x = std::max(0.0f, std::min(ref_x, static_cast<float>(width_ - 1)));
+    ref_y = std::max(0.0f, std::min(ref_y, static_cast<float>(height_ - 1)));
+    dim3 threads(16, 16);
+    dim3 blocks((width_ + threads.x - 1) / threads.x,
+                (height_ + threads.y - 1) / threads.y);
+    setGoalKernel<<<blocks, threads>>>(node_grid_, grid_, width_, height_, static_cast<int>(ref_x), static_cast<int>(ref_y));
+    CUDA_CALL(cudaDeviceSynchronize());
 }
 
 void EnvironmentMap::debug_grid_update(float world_x, float world_y) {
@@ -270,15 +289,26 @@ void EnvironmentMap::debug_grid_update(float world_x, float world_y) {
     std::cout << "========================\n";
 }
 
-void EnvironmentMap::copyNodeToHost(float* host_buffer) const {
-    size_t grid_size = width_ * height_ * sizeof(Node);
-    Node* node_buffer = new Node[grid_size];
-    cudaMemcpy(node_buffer, node_grid_, grid_size, cudaMemcpyDeviceToHost);
-    for (int idx = 0; idx < width_ ; ++idx) {
-        for (int idy = 0; idy < height_; ++idy) {
-            int index = idy * width_ + idx;
-            host_buffer[index] = node_buffer[index].f;
+void EnvironmentMap::copyNodeToHost(float* host_buffer, const char mode) const {
+    size_t node_count = width_ * height_;
+    size_t byte_size = node_count * sizeof(Node);
+    Node* node_buffer = new Node[node_count]; // Allocate correct number of elements
+    cudaMemcpy(node_buffer, node_grid_, byte_size, cudaMemcpyDeviceToHost);
+    
+    if (mode == 'f') {
+        for (int i = 0; i < node_count; ++i) {
+            host_buffer[i] = node_buffer[i].f;
         }
+    } else if (mode == 'g') {
+        for (int i = 0; i < node_count; ++i) {
+            host_buffer[i] = node_buffer[i].g;
+        }
+    } else if (mode == 'h') {
+        for (int i = 0; i < node_count; ++i) {
+            host_buffer[i] = node_buffer[i].h;
+        }
+    } else {
+        fprintf(stderr, "Invalid mode '%c' in copyNodeToHost\n", mode);
     }
-    cudaDeviceSynchronize();
+    delete[] node_buffer;
 }

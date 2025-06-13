@@ -66,6 +66,7 @@ int main() {
 
         std::vector<std::pair<float, float>> obstacles = map.obstacle_selection(mpc.num_obstacles_);
 
+        map.set_ref(ref_x, ref_y);
         DM obs_dm = obstacles_to_dm(obstacles);
 
         auto [u_opt, x_opt] = mpc.solve(x0, x_ref, obs_dm);
@@ -77,6 +78,7 @@ int main() {
                     << "  controls: " << u_opt << "\n"
                     << "  state: " << x0 << "\n"
                     << "  state error: " << state_error << "\n";
+        
         if (step >= max_step-3) map.save(std::to_string(step));
     }
 

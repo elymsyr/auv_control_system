@@ -3,49 +3,52 @@ import numpy as np
 import matplotlib.pyplot as plt
 from glob import glob
 
-def visualize_grids():
-    # Get all bin files
+def visualize_all():
+    base_names = set()
     bin_files = glob('*.bin')
-    # Group files by title
-    file_groups = {}
+
+    # Extract base names
     for f in bin_files:
-        # Extract title and subtitle
-        parts = os.path.splitext(f)[0].split('_')
-        if len(parts) < 2:
-            continue
+        if f.startswith('grid_') or f.startswith('node_'):
+            base = f.split('_', 1)[1].rsplit('.', 1)[0]
+            if f.startswith('node_'):
+                base = base.split('_')[0]
+            base_names.add(base)
 
-        title = parts[0]
-        subtitle = '_'.join(parts[1:]) if len(parts) > 1 else 'no_subtitle'
+    for base in sorted(base_names):
+        fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+        fig.suptitle(f'Base: {base}', fontsize=16)
 
-        if title not in file_groups:
-            file_groups[title] = []
-        file_groups[title].append((subtitle, f))
-    
-    # Visualize each group
-    for title, files in file_groups.items():
-        files.sort(key=lambda x: x[0])  # Sort by subtitle
-        num_files = len(files)
-        
-        plt.figure(figsize=(15, 5))
-        plt.suptitle(f'Title: {title}', fontsize=16)
-        
-        for i, (subtitle, filename) in enumerate(files):
-            try:
-                # Read and reshape grid
-                grid_data = np.fromfile(filename, dtype=np.uint8)
-                size = int(np.sqrt(len(grid_data)))
-                grid = grid_data.reshape((size, size))
-                
-                # Create subplot
-                plt.subplot(1, num_files, i+1)
-                plt.imshow(grid, cmap='viridis', vmin=0, vmax=255)
-                plt.colorbar()
-                plt.title(f'Subtitle: {subtitle}')
-            except Exception as e:
-                print(f"Error processing {filename}: {str(e)}")
-        
-        plt.tight_layout()
+        # --- Grid File ---
+        grid_file = f'grid_{base}.bin'
+        if os.path.exists(grid_file):
+            grid_data = np.fromfile(grid_file, dtype=np.uint8)
+            size = int(np.sqrt(len(grid_data)))
+            if size * size == len(grid_data):
+                im0 = axes[0].imshow(grid_data.reshape((size, size)), cmap='viridis', vmin=0, vmax=255)
+                axes[0].set_title('Grid Data (uint8)')
+                fig.colorbar(im0, ax=axes[0])
+            else:
+                axes[0].set_title('Grid size mismatch')
+        else:
+            axes[0].set_title('Grid file not found')
+
+        # --- Node File ---
+        node_file_f = f'node_{base}_f.bin'
+        if os.path.exists(node_file_f):
+            node_data = np.fromfile(node_file_f, dtype=np.float32)
+            size = int(np.sqrt(len(node_data)))
+            if size * size == len(node_data):
+                im1 = axes[1].imshow(node_data.reshape((size, size)), cmap='plasma')
+                axes[1].set_title('Node Data (float32)')
+                fig.colorbar(im1, ax=axes[1])
+            else:
+                axes[1].set_title('Node size mismatch')
+        else:
+            axes[1].set_title('Node file not found')
+
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
         plt.show()
 
 # Run the visualization
-visualize_grids()
+visualize_all()
