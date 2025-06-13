@@ -16,7 +16,7 @@ EnvironmentMap::EnvironmentMap(int width, int height) : width_(width), height_(h
     cudaMalloc(&tempGrid_, size);
     cudaMemset(grid_, 0, size);
     CHECK_CUDA(cudaMalloc(&node_grid_, width_ * height_ * sizeof(Node)));
-    // initializeGrid();
+    initializeGrid();
 }
 
 EnvironmentMap::~EnvironmentMap() {
@@ -186,15 +186,28 @@ void EnvironmentMap::copyGridToHost(uint8_t* host_buffer) const {
     cudaDeviceSynchronize();
 }
 
-void EnvironmentMap::save(const char* filename) const {
-    uint8_t* h_grid = new uint8_t[width_ * height_];
+void EnvironmentMap::save(std::string name) const {
+    std::string filename_grid = "grid_" + name + ".bin";
+    std::string filename_node = "node_" + name + ".bin";
+
+    size_t total_elements = width_ * height_;
+    uint8_t* h_grid = new uint8_t[total_elements];
     copyGridToHost(h_grid);
-    
-    std::ofstream file(filename, std::ios::binary);
-    file.write(reinterpret_cast<char*>(h_grid), width_ * height_);
+
+    std::ofstream file(filename_grid, std::ios::binary);
+    file.write(reinterpret_cast<char*>(h_grid), total_elements);
     file.close();
     
     delete[] h_grid;
+
+    float* node_buffer = new float[total_elements];
+    copyNodeToHost(node_buffer);
+
+    std::ofstream out(filename_node, std::ios::out | std::ios::binary);
+    out.write(reinterpret_cast<const char*>(node_buffer), total_elements * sizeof(float));
+    out.close();
+
+    delete[] node_buffer;
 }
 
 void EnvironmentMap::set_velocity(float vx, float vy) {
@@ -255,4 +268,17 @@ void EnvironmentMap::debug_grid_update(float world_x, float world_y) {
         std::cout << "Coordinates are OUTSIDE grid bounds!\n";
     }
     std::cout << "========================\n";
+}
+
+void EnvironmentMap::copyNodeToHost(float* host_buffer) const {
+    size_t grid_size = width_ * height_ * sizeof(Node);
+    Node* node_buffer = new Node[grid_size];
+    cudaMemcpy(node_buffer, node_grid_, grid_size, cudaMemcpyDeviceToHost);
+    for (int idx = 0; idx < width_ ; ++idx) {
+        for (int idy = 0; idy < height_; ++idy) {
+            int index = idy * width_ + idx;
+            host_buffer[index] = node_buffer[index].f;
+        }
+    }
+    cudaDeviceSynchronize();
 }

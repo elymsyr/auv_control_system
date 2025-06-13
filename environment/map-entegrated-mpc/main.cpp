@@ -49,7 +49,6 @@ int main() {
         map.updateSinglePoint(-3.2156f, 2.13459f, 255.0f);
         map.updateSinglePoint(5.025f, 1.8908f, 255.0f);
         map.updateSinglePoint(10.0506f, 4.34f, 255.0f);
-        map.save("initial_updated.bin");
     }
 
     DM x0 = DM::vertcat({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
@@ -57,7 +56,7 @@ int main() {
     map.set_ref(ref_x, ref_y);
     map.set_velocity(0.0f, 0.0f);
 
-    int max_step = 20;
+    int max_step = 5;
 
     for (int step = 0; step < max_step; ++step) {
         double eta1 = static_cast<double>(x0(0));
@@ -78,10 +77,7 @@ int main() {
                     << "  controls: " << u_opt << "\n"
                     << "  state: " << x0 << "\n"
                     << "  state error: " << state_error << "\n";
-        if (step >= max_step-3) {
-            std::string step_name = "step_" + std::to_string(step) + ".bin";
-            map.save(step_name.c_str());
-        }
+        if (step >= max_step-3) map.save(std::to_string(step));
     }
 
     // {

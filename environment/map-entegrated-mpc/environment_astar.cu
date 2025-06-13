@@ -1,20 +1,20 @@
-// #include <cmath>
-// #include <vector>
-// #include <cuda_runtime.h>
-// #include <cstdint>
-// #include <cstdio>
-// #include <cstdlib>
-// #include "environment.h"
-// #include <fstream>
+#include <cmath>
+#include <vector>
+#include <cuda_runtime.h>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include "environment.h"
+#include <fstream>
 
-// void EnvironmentMap::initializeGrid() {
-//     dim3 block(16, 16);
-//     dim3 grid((width_ + block.x - 1) / block.x, 
-//               (height_ + block.y - 1) / block.y);
+void EnvironmentMap::initializeGrid() {
+    dim3 block(16, 16);
+    dim3 grid((width_ + block.x - 1) / block.x, 
+              (height_ + block.y - 1) / block.y);
 
-//     initKernel<<<grid, block>>>(node_grid_, width_, height_);
-//     CHECK_CUDA(cudaDeviceSynchronize());
-// }
+    initKernel<<<grid, block>>>(node_grid_, width_, height_);
+    CHECK_CUDA(cudaDeviceSynchronize());
+}
 
 // Path EnvironmentMap::findPath() {
 //     if (goal_x_ < 0 || goal_y_ < 0) return Path{nullptr, 0};
@@ -54,29 +54,29 @@
 //     return path_result;
 // }
 
-// // void EnvironmentMap::save(const char* filename) const {
-// //     // Allocate host memory for grid
-// //     Node* h_grid = new Node[width_ * height_];
+// void EnvironmentMap::save(const char* filename) const {
+//     // Allocate host memory for grid
+//     Node* h_grid = new Node[width_ * height_];
     
-// //     // Copy device grid to host
-// //     CHECK_CUDA(cudaMemcpy(h_grid, d_grid_, 
-// //                          width_ * height_ * sizeof(Node),
-// //                          cudaMemcpyDeviceToHost));
+//     // Copy device grid to host
+//     CHECK_CUDA(cudaMemcpy(h_grid, d_grid_, 
+//                          width_ * height_ * sizeof(Node),
+//                          cudaMemcpyDeviceToHost));
     
-// //     // Create buffer for f values
-// //     float* f_values = new float[width_ * height_];
+//     // Create buffer for f values
+//     float* f_values = new float[width_ * height_];
     
-// //     for (int idy = 0; idy < height_; idy++) {
-// //         for (int idx = 0; idx < width_; idx++) {
-// //             int index = idy * width_ + idx;
-// //             f_values[index] = h_grid[index].f;
-// //         }
-// //     }
+//     for (int idy = 0; idy < height_; idy++) {
+//         for (int idx = 0; idx < width_; idx++) {
+//             int index = idy * width_ + idx;
+//             f_values[index] = h_grid[index].f;
+//         }
+//     }
 
-// //     std::ofstream file(filename, std::ios::binary);
-// //     file.write(reinterpret_cast<char*>(h_grid), width_ * height_);
-// //     file.close();
+//     std::ofstream file(filename, std::ios::binary);
+//     file.write(reinterpret_cast<char*>(h_grid), width_ * height_);
+//     file.close();
     
-// //     delete[] h_grid;
-// //     delete[] f_values;
-// // }
+//     delete[] h_grid;
+//     delete[] f_values;
+// }

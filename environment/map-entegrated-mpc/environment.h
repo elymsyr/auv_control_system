@@ -57,7 +57,7 @@ public:
     
     uint8_t* getGridDevicePtr() const;
     void copyGridToHost(uint8_t* host_buffer) const;
-    void save(const char* filename) const;
+    void save(std::string name) const;
 
     std::vector<std::pair<float, float>> obstacle_selection(int number_obs = 0);
     void set_ref(float x, float y);
@@ -68,9 +68,10 @@ public:
     static void fillPointBatchWithRandom(class PointBatch* batch, int grid_width, int grid_height);
     void debug_grid_update(float world_x, float world_y);
 
-    // // astar
+    // astar
     // void updateGrid();
     // Path findPath();
+    void copyNodeToHost(float* host_buffer) const;
 
     int width_;
     int height_;
@@ -113,9 +114,9 @@ __global__ void obstacleSelectionKernel(uint8_t* grid, int width, int height, fl
 // astar kernel
 __device__ void atomicMinFloat(float* address, float val);
 __global__ void initKernel(Node* grid, int width, int height);
-__global__ void setGoalKernel(Node* grid, int width, int height, int goal_x, int goal_y);
-__global__ void aStarKernel(Node* grid, uint8_t* obstacles, int width, int height, int start_x, int start_y, int goal_x, int goal_y);
-__global__ void computePathLength(Node* grid, int width, int height, int start_x, int start_y, int goal_x, int goal_y, int* length);
-__global__ void reconstructPath(Node* grid, int width, int height, int start_x, int start_y, int goal_x, int goal_y, int2* path, int length);
+// __global__ void setGoalKernel(Node* grid, int width, int height, int goal_x, int goal_y);
+// __global__ void aStarKernel(Node* grid, uint8_t* obstacles, int width, int height, int start_x, int start_y, int goal_x, int goal_y);
+// __global__ void computePathLength(Node* grid, int width, int height, int start_x, int start_y, int goal_x, int goal_y, int* length);
+// __global__ void reconstructPath(Node* grid, int width, int height, int start_x, int start_y, int goal_x, int goal_y, int2* path, int length);
 
 #endif
