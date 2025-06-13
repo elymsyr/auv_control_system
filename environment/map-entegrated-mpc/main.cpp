@@ -60,6 +60,10 @@ int main() {
         map.slide(static_cast<float>(eta1), static_cast<float>(eta2));
 
         std::vector<std::pair<float, float>> obstacles = map.obstacle_selection(mpc.num_obstacles_);
+        Path path = map.findPath();
+        for (const auto& obstacle : obstacles) {
+            map.updateSinglePoint(obstacle.first, obstacle.second, 100.0f);
+        }
 
         map.set_ref(ref_x, ref_y);
         DM obs_dm = obstacles_to_dm(obstacles);

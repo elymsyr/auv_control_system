@@ -50,15 +50,15 @@ __global__ void pointUpdateKernel(uint8_t* grid, int width, int height, float x_
 __global__ void singlePointUpdateKernel(uint8_t* grid, int width, int height, 
                                         float x_r, float y_r, float r_m,
                                         float world_x, float world_y, 
-                                        uint8_t value, int radius) {
-    // Convert world coordinates to grid coordinates
-    float grid_x = (world_x - x_r) / r_m + width / 2.0f;
-    float grid_y = (world_y - y_r) / r_m + height / 2.0f;
-    
-    int x_coor = __float2int_rd(grid_x);
-    int y_coor = __float2int_rd(grid_y);
+                                        uint8_t value, int radius, char mode) {
+    if (mode == 'w') {
+        world_x = (world_x - x_r) / r_m + width / 2.0f;
+        world_y = (world_y - y_r) / r_m + height / 2.0f;
+    }
 
-    // Check bounds and update grid center
+    int x_coor = __float2int_rd(world_x);
+    int y_coor = __float2int_rd(world_y);
+
     if (x_coor >= 0 && x_coor < width && y_coor >= 0 && y_coor < height) {
         int index = y_coor * width + x_coor;
         grid[index] = value;

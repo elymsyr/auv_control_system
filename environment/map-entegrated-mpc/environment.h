@@ -53,7 +53,7 @@ public:
 
     void slide(float dx, float dy);
     void updateWithBatch(class PointBatch* batch);
-    void updateSinglePoint(float world_x, float world_y, uint8_t value);
+    void updateSinglePoint(float world_x, float world_y, uint8_t value, char mode = 'w');
     
     uint8_t* getGridDevicePtr() const;
     void copyGridToHost(uint8_t* host_buffer) const;
@@ -70,7 +70,7 @@ public:
 
     // astar
     // void updateGrid();
-    Path findPath(int goal_x, int goal_y);
+    Path findPath();
     void copyNodeToHost(float* host_buffer, const char mode = 'f') const;
 
     int width_;
@@ -86,6 +86,7 @@ public:
     float circle_radius_ = 10.0f;
     int number_obs_to_feed_ = 50;
     int max_iter_ = 1000;
+    int obstacle_radius_ = 5;
 
 private:
     float round_;
@@ -109,7 +110,7 @@ float distance(float x1, float y1, float x2, float y2);
 __global__ void slidePhase1(uint8_t* grid, uint8_t* tempGrid, int width, int height, int2 shift);
 __global__ void slidePhase2(uint8_t* grid, uint8_t* tempGrid, int width, int height);
 __global__ void pointUpdateKernel(uint8_t* grid, int width, int height, float x_r, float y_r, float r_m, float2* coords_dev, uint8_t* values_dev, int count);
-__global__ void singlePointUpdateKernel(uint8_t* grid, int width, int height, float x_r, float y_r, float r_m,float world_x, float world_y, uint8_t value, int radius = 5);
+__global__ void singlePointUpdateKernel(uint8_t* grid, int width, int height, float x_r, float y_r, float r_m,float world_x, float world_y, uint8_t value, int radius = 5, char mode = 'w');
 __global__ void obstacleSelectionKernel(uint8_t* grid, int width, int height, float wx, float wy, float* output_dists, float2* output_coords, int* output_count, int max_output, float circle_radius, float r_m_);
 
 // astar kernel

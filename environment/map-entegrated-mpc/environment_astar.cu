@@ -16,12 +16,17 @@ void EnvironmentMap::initializeGrid() {
     CHECK_CUDA(cudaDeviceSynchronize());
 }
 
-Path EnvironmentMap::findPath(int goal_x, int goal_y) {
+Path EnvironmentMap::findPath() {
     int start_x = width_ / 2;
     int start_y = height_ / 2;
 
     dim3 block(16, 16);
     dim3 grid((width_ + 15) / 16, (height_ + 15) / 16);
+
+    int goal_x = (ref_.x - world_position_.x) / r_m_ + width_ / 2;
+    goal_x = std::max(0, std::min(goal_x, width_ - 1));
+    int goal_y = (ref_.y - world_position_.y) / r_m_ + height_ / 2;
+    goal_y = std::max(0, std::min(goal_y, height_ - 1));
 
     // Step 1: Reset grid
     resetGridKernel<<<grid, block>>>(node_grid_, grid_, width_, height_, goal_x, goal_y);

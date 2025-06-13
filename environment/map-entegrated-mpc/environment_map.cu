@@ -169,10 +169,10 @@ void EnvironmentMap::updateWithBatch(PointBatch* batch) {
     cudaDeviceSynchronize();
 }
 
-void EnvironmentMap::updateSinglePoint(float world_x, float world_y, uint8_t value) {
+void EnvironmentMap::updateSinglePoint(float world_x, float world_y, uint8_t value, char mode) {
     singlePointUpdateKernel<<<1, 1>>>(grid_, width_, height_, 
                                       world_position_.x, world_position_.y, r_m_, 
-                                      world_x, world_y, value);
+                                      world_x, world_y, value, obstacle_radius_, mode);
     cudaDeviceSynchronize();
 }
 
@@ -299,11 +299,11 @@ void EnvironmentMap::copyNodeToHost(float* host_buffer, const char mode) const {
     
     if (mode == 'f') {
         for (int i = 0; i < node_count; ++i) {
-            host_buffer[i] = node_buffer[i].g;
+            host_buffer[i] = node_buffer[i].g + node_buffer[i].h;
         }
-    } else if (mode == 'h') {
+    } else if (mode == 'g') {
         for (int i = 0; i < node_count; ++i) {
-            host_buffer[i] = node_buffer[i].h;
+            host_buffer[i] = node_buffer[i].g;
         }
     } else if (mode == 'h') {
         for (int i = 0; i < node_count; ++i) {
