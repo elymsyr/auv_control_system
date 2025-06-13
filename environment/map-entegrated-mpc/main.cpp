@@ -51,7 +51,7 @@ int main() {
     map.set_ref(ref_x, ref_y);
     map.set_velocity(0.0f, 0.0f);
 
-    int max_step = 5;
+    int max_step = 3;
 
     for (int step = 0; step < max_step; ++step) {
         double eta1 = static_cast<double>(x0(0));
@@ -61,9 +61,12 @@ int main() {
 
         std::vector<std::pair<float, float>> obstacles = map.obstacle_selection(mpc.num_obstacles_);
         Path path = map.findPath();
-        for (const auto& obstacle : obstacles) {
-            map.updateSinglePoint(obstacle.first, obstacle.second, 100.0f);
+        for (int i = 0; i < path.length; ++i) {
+            auto node = path.points[i];
+            map.updateSinglePoint(static_cast<int>(node.x), static_cast<int>(node.y), 50.0f, 'p');
+            std::cout << "Path point " << i << ": (" << node.x << ", " << node.y << ")\n";
         }
+        std::cout << "Path length: " << path.length << "\n";
 
         map.set_ref(ref_x, ref_y);
         DM obs_dm = obstacles_to_dm(obstacles);
