@@ -18,8 +18,6 @@
     } \
 }
 
-// DM create_reference_from_path(const DM& current_state, const std::vector<std::pair<float, float>>& path, int horizon);
-// DM pathToReference(const DM& current_state, Path path, const EnvironmentMap& map, int horizon);
 DM obstacles_to_dm(const std::vector<std::pair<float, float>>& obstacles);
 
 int main() {
@@ -32,9 +30,6 @@ int main() {
     EnvironmentMap map(WIDTH, HEIGHT);
     VehicleModel model("config.json"); 
     NonlinearMPC mpc(model, N);
-
-    // std::cout << "After construction:\n";
-    // // map.save("initial_empty.bin");
 
     {
         std::cout << "\n--- Adding Single Points ---\n";
@@ -81,113 +76,8 @@ int main() {
         
         if (step >= max_step-3) map.save(std::to_string(step));
     }
-
-    // {
-    //     std::cout << "\n--- Map Sliding Test ---\n";
-        
-    //     map.slide(322.0f, 0.0f);
-    //     std::cout << "Map slid by (122.0, -47.0)\n";
-    //     map.save("initial_shifted.bin");
-        
-    //     auto obstacles = map.obstacle_selection(5);
-    //     std::cout << "Obstacles after sliding:\n";
-    //     for (size_t i = 0; i < obstacles.size(); i++) {
-    //         std::cout << "  Obstacle " << i+1 << ": (" 
-    //                   << obstacles[i].first << ", " << obstacles[i].second << ")\n";
-    //     }
-    // }
-
-    // {
-    //     std::cout << "\n--- Point Batch Test ---\n";
-    //     PointBatch* batch = EnvironmentMap::createPointBatch(10000);
-    //     EnvironmentMap::fillPointBatchWithRandom(batch, WIDTH, HEIGHT);
-    //     map.updateWithBatch(batch);
-    //     EnvironmentMap::destroyPointBatch(batch);
-    //     map.save("initial_filled.bin");
-    // }
-
-    // {
-    //     map.set_velocity(-50.0f, -50.0f);
-    //     map.set_x_ref(250.0f, 350.0f);
-
-    //     auto obstacles = map.obstacle_selection();
-    //     std::cout << "Obstacles after sliding:\n";
-    //     for (size_t i = 0; i < obstacles.size(); i++) {
-    //         map.updateSinglePoint(obstacles[i].first, obstacles[i].second, 200);
-    //     }
-    //     map.updateSinglePoint(250.0f, 350.0f, 255);
-    //     map.updateSinglePoint(0.0f, 0.0f, 250);
-    //     map.updateSinglePoint(-100.0f, -100.0f, 255);
-    //     map.save("initial_signed.bin");
-    // }
     return 0;
 }
-
-// DM create_reference_from_path(const DM& current_state, 
-//                             const std::vector<std::pair<float, float>>& path,
-//                             int horizon) {
-//     DM x_ref = DM::zeros(12, horizon+1);
-//     if (path.empty()) return x_ref;
-    
-//     double current_x = static_cast<double>(current_state(0));
-//     double current_y = static_cast<double>(current_state(1));
-    
-//     // Find closest point on path
-//     int closest_idx = 0;
-//     double min_dist = std::numeric_limits<double>::max();
-//     for (int i = 0; i < path.size(); ++i) {
-//         double dx = current_x - path[i].first;
-//         double dy = current_y - path[i].second;
-//         double dist = dx*dx + dy*dy;
-//         if (dist < min_dist) {
-//             min_dist = dist;
-//             closest_idx = i;
-//         }
-//     }
-    
-//     // Create reference trajectory
-//     int points_to_use = std::min(static_cast<int>(path.size()) - closest_idx, horizon+1);
-//     for (int i = 0; i < points_to_use; ++i) {
-//         int path_idx = closest_idx + i;
-//         x_ref(0, i) = path[path_idx].first;
-//         x_ref(1, i) = path[path_idx].second;
-//     }
-    
-//     // Extend with last point if needed
-//     if (points_to_use < horizon+1) {
-//         for (int i = points_to_use; i <= horizon; ++i) {
-//             x_ref(0, i) = path.back().first;
-//             x_ref(1, i) = path.back().second;
-//         }
-//     }
-    
-//     return x_ref;
-// }
-
-// DM pathToReference(const DM& current_state, Path path, 
-//                    const EnvironmentMap& map, int horizon) {
-//     if (path.length == 0) {
-//         // Return default reference if no path
-//         std::cout << "No path found, returning default reference.\n";
-//         return DM::repmat(DM::vertcat({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, horizon+1);
-//     }
-
-//     // Copy path to host
-//     std::vector<int2> h_path(path.length);
-//     CUDA_CALL(cudaMemcpy(h_path.data(), path.points, 
-//                          path.length * sizeof(int2), cudaMemcpyDeviceToHost));
-
-//     // Convert to global coordinates
-//     std::vector<std::pair<float, float>> global_path;
-//     for (int i = 0; i < path.length; i++) {
-//         float x_global, y_global;
-//         map.gridToGlobal(h_path[i].x, h_path[i].y, x_global, y_global);
-//         global_path.push_back({x_global, y_global});
-//     }
-
-//     // Create reference trajectory
-//     return create_reference_from_path(current_state, global_path, horizon);
-// }
 
 // Convert obstacles to DM matrix
 DM obstacles_to_dm(const std::vector<std::pair<float, float>>& obstacles) {
@@ -209,5 +99,5 @@ DM obstacles_to_dm(const std::vector<std::pair<float, float>>& obstacles) {
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c vehicle_model.cpp -o vehicle_model.o
 // g++ -o main environment_map.o environment_astar.o environment_global.o main.o vehicle_model.o nlmpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lcasadi -lipopt -lzmq -lcudart -L/usr/local/cuda/lib64
 // ./main
-// rm -f *.o *.so jit_* libdynamics_func*
 // python /home/eren/GitHub/ControlSystem/environment/map-entegrated-mpc/visualize.py
+// rm -f *.o *.so jit_* libdynamics_func* *.bin

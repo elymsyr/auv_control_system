@@ -16,67 +16,53 @@ void EnvironmentMap::initializeGrid() {
     CHECK_CUDA(cudaDeviceSynchronize());
 }
 
-// Path EnvironmentMap::findPath() {
-//     if (goal_x_ < 0 || goal_y_ < 0) return Path{nullptr, 0};
+Path EnvironmentMap::findPath(int goal_x, int goal_y) {
+    int start_x = width_ / 2;
+    int start_y = height_ / 2;
 
-//     // Run A* kernel
-//     dim3 block(16, 16);
-//     dim3 grid((width_ + block.x - 1) / block.x, 
-//               (height_ + block.y - 1) / block.y);
-//     size_t shared_mem = block.x * block.y * sizeof(bool);
+    dim3 block(16, 16);
+    dim3 grid((width_ + 15) / 16, (height_ + 15) / 16);
+
+    // Step 1: Reset grid
+    resetGridKernel<<<grid, block>>>(node_grid_, grid_, width_, height_, goal_x, goal_y);
+    CUDA_CALL(cudaDeviceSynchronize());
+
+    // Step 2: Wavefront propagation
+    int* d_updated;
+    int h_updated = 1;
+    CUDA_CALL(cudaMalloc(&d_updated, sizeof(int)));
     
-//     aStarKernel<<<grid, block, shared_mem>>>(d_grid_, obstacles, width_, height_,
-//         start_x_, start_y_, goal_x_, goal_y_);
-//     CHECK_CUDA(cudaDeviceSynchronize());
+    for (int iter = 0; iter < max_iter_ && h_updated; iter++) {
+        h_updated = 0;
+        CUDA_CALL(cudaMemcpy(d_updated, &h_updated, sizeof(int), cudaMemcpyHostToDevice));
+        
+        wavefrontKernel<<<grid, block>>>(node_grid_, width_, height_, d_updated);
+        CUDA_CALL(cudaMemcpy(&h_updated, d_updated, sizeof(int), cudaMemcpyDeviceToHost));
+    }
 
-//     // Compute path length
-//     int* d_length;
-//     CHECK_CUDA(cudaMalloc(&d_length, sizeof(int)));
-//     computePathLength<<<1,1>>>(d_grid_, width_, height_, 
-//                               start_x_, start_y_, goal_x_, goal_y_, d_length);
-//     CHECK_CUDA(cudaDeviceSynchronize());
-
-//     int length;
-//     CHECK_CUDA(cudaMemcpy(&length, d_length, sizeof(int), cudaMemcpyDeviceToHost));
-//     CHECK_CUDA(cudaFree(d_length));
-
-//     Path path_result = {nullptr, 0};
-//     if (length <= 0) return path_result;
-
-//     // Allocate and reconstruct path
-//     CHECK_CUDA(cudaMalloc(&path_result.points, length * sizeof(int2)));
-//     reconstructPath<<<1,1>>>(d_grid_, width_, height_, 
-//                             start_x_, start_y_, goal_x_, goal_y_, 
-//                             path_result.points, length);
-//     CHECK_CUDA(cudaDeviceSynchronize());
+    // Step 3: Reconstruct path
+    int2* d_path;
+    int* d_path_length;
+    CUDA_CALL(cudaMalloc(&d_path, width_ * height_ * sizeof(int2)));
+    CUDA_CALL(cudaMalloc(&d_path_length, sizeof(int)));
+    CUDA_CALL(cudaMemset(d_path_length, 0, sizeof(int)));
     
-//     path_result.length = length;
-//     return path_result;
-// }
+    reconstructPathKernel<<<1, 1>>>(node_grid_, d_path, d_path_length, 
+                                   start_x, start_y, goal_x, goal_y, width_);
+    
+    int path_length;
+    CUDA_CALL(cudaMemcpy(&path_length, d_path_length, sizeof(int), cudaMemcpyDeviceToHost));
+    
+    int2* h_path = new int2[path_length];
+    CUDA_CALL(cudaMemcpy(h_path, d_path, path_length * sizeof(int2), cudaMemcpyDeviceToHost));
 
-// void EnvironmentMap::save(const char* filename) const {
-//     // Allocate host memory for grid
-//     Node* h_grid = new Node[width_ * height_];
-    
-//     // Copy device grid to host
-//     CHECK_CUDA(cudaMemcpy(h_grid, d_grid_, 
-//                          width_ * height_ * sizeof(Node),
-//                          cudaMemcpyDeviceToHost));
-    
-//     // Create buffer for f values
-//     float* f_values = new float[width_ * height_];
-    
-//     for (int idy = 0; idy < height_; idy++) {
-//         for (int idx = 0; idx < width_; idx++) {
-//             int index = idy * width_ + idx;
-//             f_values[index] = h_grid[index].f;
-//         }
-//     }
+    // Reverse path (start->goal)
+    // std::reverse(h_path, h_path + path_length);
 
-//     std::ofstream file(filename, std::ios::binary);
-//     file.write(reinterpret_cast<char*>(h_grid), width_ * height_);
-//     file.close();
+    // Cleanup
+    CUDA_CALL(cudaFree(d_updated));
+    CUDA_CALL(cudaFree(d_path));
+    CUDA_CALL(cudaFree(d_path_length));
     
-//     delete[] h_grid;
-//     delete[] f_values;
-// }
+    return {h_path, path_length};
+}

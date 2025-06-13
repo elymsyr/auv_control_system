@@ -205,17 +205,19 @@ void EnvironmentMap::save(std::string name) const {
     float* node_buffer = new float[total_elements];
     
     copyNodeToHost(node_buffer, 'f');
-    std::ofstream out(filename_node_f, std::ios::out | std::ios::binary);
-    out.write(reinterpret_cast<const char*>(node_buffer), total_elements * sizeof(float));
-    out.close();
+    std::ofstream out_f(filename_node_f, std::ios::out | std::ios::binary);
+    out_f.write(reinterpret_cast<const char*>(node_buffer), total_elements * sizeof(float));
+    out_f.close();
 
     copyNodeToHost(node_buffer, 'h');
-    out.write(reinterpret_cast<const char*>(node_buffer), total_elements * sizeof(float));
-    out.close();
+    std::ofstream out_h(filename_node_h, std::ios::out | std::ios::binary);
+    out_h.write(reinterpret_cast<const char*>(node_buffer), total_elements * sizeof(float));
+    out_h.close();
 
     copyNodeToHost(node_buffer, 'g');
-    out.write(reinterpret_cast<const char*>(node_buffer), total_elements * sizeof(float));
-    out.close();
+    std::ofstream out_g(filename_node_g, std::ios::out | std::ios::binary);
+    out_g.write(reinterpret_cast<const char*>(node_buffer), total_elements * sizeof(float));
+    out_g.close();
 
     delete[] node_buffer;
 }
@@ -235,7 +237,7 @@ void EnvironmentMap::set_ref(float ref_x, float ref_y) {
     dim3 threads(16, 16);
     dim3 blocks((width_ + threads.x - 1) / threads.x,
                 (height_ + threads.y - 1) / threads.y);
-    setGoalKernel<<<blocks, threads>>>(node_grid_, grid_, width_, height_, static_cast<int>(ref_x), static_cast<int>(ref_y));
+    resetGridKernel<<<blocks, threads>>>(node_grid_, grid_, width_, height_, static_cast<int>(ref_x), static_cast<int>(ref_y));
     CUDA_CALL(cudaDeviceSynchronize());
 }
 
@@ -297,11 +299,11 @@ void EnvironmentMap::copyNodeToHost(float* host_buffer, const char mode) const {
     
     if (mode == 'f') {
         for (int i = 0; i < node_count; ++i) {
-            host_buffer[i] = node_buffer[i].f;
-        }
-    } else if (mode == 'g') {
-        for (int i = 0; i < node_count; ++i) {
             host_buffer[i] = node_buffer[i].g;
+        }
+    } else if (mode == 'h') {
+        for (int i = 0; i < node_count; ++i) {
+            host_buffer[i] = node_buffer[i].h;
         }
     } else if (mode == 'h') {
         for (int i = 0; i < node_count; ++i) {

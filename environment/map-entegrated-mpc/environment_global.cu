@@ -106,16 +106,18 @@ __global__ void obstacleSelectionKernel(uint8_t* grid, int width, int height, fl
 }
 
 // A*
-__device__ void atomicMinFloat(float* address, float val) {
+__device__ float atomicMinFloat(float* address, float val) {
     int* address_as_i = (int*)address;
     int old = *address_as_i;
     int expected;
+    float old_val;
     do {
         expected = old;
-        float old_val = __int_as_float(expected);
-        float new_val = fminf(old_val, val);
-        old = atomicCAS(address_as_i, expected, __float_as_int(new_val));
+        old_val = __int_as_float(expected);
+        if (old_val <= val) return old_val;  // Return early if no update needed
+        old = atomicCAS(address_as_i, expected, __float_as_int(val));
     } while (expected != old);
+    return old_val;
 }
 
 __global__ void initKernel(Node* grid, int width, int height) {
@@ -129,148 +131,86 @@ __global__ void initKernel(Node* grid, int width, int height) {
     node->y = idy;
     node->g = sqrtf(powf(idx - width / 2, 2) + powf(idy - height / 2, 2));
     node->h = FLT_MAX;
-    node->f = node->h + node->g;
     node->parent_x = -1;
     node->parent_y = -1;
     node->status = 1;
 }
 
-__global__ void setGoalKernel(Node* grid, uint8_t* map, int width, int height, int goal_x, int goal_y) {
+__global__ void resetGridKernel(Node* grid, uint8_t* map, int width, int height, int goal_x, int goal_y) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int idy = blockIdx.y * blockDim.y + threadIdx.y;
     if (idx >= width || idy >= height) return;
 
     int index = idy * width + idx;
     Node* node = &grid[index];
+    node->parent_x = -1;
+    node->parent_y = -1;
+    node->h = sqrtf(powf(idx - goal_x, 2) + powf(idy - goal_y, 2));
     if (map[index] >= 250) {
         node->status = 0;
-        node->f = FLT_MAX;
     } else {
         node->status = 1;
-        node->h = sqrtf(powf(idx - goal_x, 2) + powf(idy - goal_y, 2));
-        node->f = node->g + node->h;
     }
 }
 
-// __global__ void aStarKernel(Node* grid, uint8_t* obstacles, int width, int height, int start_x, int start_y, int goal_x, int goal_y) {
-//     extern __shared__ bool changed[];
-//     int index = threadIdx.x + threadIdx.y * blockDim.x;
-//     changed[index] = false;
+__global__ void wavefrontKernel(Node* grid, int width, int height, int* d_updated) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idy = blockIdx.y * blockDim.y + threadIdx.y;
+    if (idx >= width || idy >= height) return;
+    
+    int index = idy * width + idx;
+    Node* node = &grid[index];
+    if (node->status != 1) return;  // Only process free nodes
 
-//     if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0 && threadIdx.y == 0) {
-//         int start_idx = start_y * width + start_x;
-//         Node* start = &grid[start_idx];
-//         start->g = 0;
-//         start->f = start->h;
-//         start->status = 1; // open
-//         changed[index] = true;
-//     }
-//     __syncthreads();
+    // Check 8 neighbors
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            if (dx == 0 && dy == 0) continue;
+            
+            int nx = idx + dx;
+            int ny = idy + dy;
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+            
+            int nidx = ny * width + nx;
+            Node* neighbor = &grid[nidx];
+            if (neighbor->status == 0) continue;  // Skip obstacles
+            
+            float cost = (dx && dy) ? 1.4142f : 1.0f;
+            float new_g = neighbor->g + cost;
+            
+            // Capture the return value properly
+            float old_g = atomicMinFloat(&node->g, new_g);
+            
+            if (new_g < old_g) {
+                node->parent_x = nx;
+                node->parent_y = ny;
+                atomicMax(d_updated, 1);  // Mark update
+            }
+        }
+    }
+}
 
-//     bool any_changed = true;
-//     while (any_changed) {
-//         any_changed = false;
-//         __syncthreads();
+__global__ void reconstructPathKernel(Node* grid, int2* path, int* path_length, int start_x, int start_y, int goal_x, int goal_y, int width) {
+    int x = goal_x;
+    int y = goal_y;
+    int count = 0;
+    int max_length = width * width;  // Safeguard
 
-//         int idx = blockIdx.x * blockDim.x + threadIdx.x;
-//         int idy = blockIdx.y * blockDim.y + threadIdx.y;
-//         if (idx >= width || idy >= height) continue;
-
-//         int curr_idx = idy * width + idx;
-//         Node* curr = &grid[curr_idx];
-//         if (curr->status != 1) continue;
-
-//         if (idx == goal_x && idy == goal_y) {
-//             return; // goal reached
-//         }
-
-//         int dx[] = {1, -1, 0, 0};
-//         int dy[] = {0, 0, 1, -1};
-
-//         for (int i = 0; i < 4; ++i) {
-//             int nx = idx + dx[i];
-//             int ny = idy + dy[i];
-//             if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-
-//             int neighbor_idx = ny * width + nx;
-//             if (obstacles[neighbor_idx] >= 250) continue; // obstacle
-
-//             Node* neighbor = &grid[neighbor_idx];
-//             float tentative_g = curr->g + 1.0f;
-
-//             if (tentative_g < neighbor->g) {
-//                 neighbor->g = tentative_g;
-//                 neighbor->f = tentative_g + neighbor->h;
-//                 neighbor->parent_x = idx;
-//                 neighbor->parent_y = idy;
-//                 neighbor->status = 1; // open
-//                 changed[index] = true;
-//             }
-//         }
-
-//         curr->status = 2; // close current node
-//         __syncthreads();
-
-//         for (int i = 0; i < blockDim.x * blockDim.y; ++i) {
-//             if (changed[i]) {
-//                 any_changed = true;
-//                 break;
-//             }
-//         }
-//     }
-// }
-
-// __global__ void computePathLength(Node* grid, int width, int height, int start_x, int start_y, int goal_x, int goal_y, int* length) {
-//     if (goal_x == start_x && goal_y == start_y) {
-//         *length = 1;
-//         return;
-//     }
-
-//     Node goal_node = grid[goal_y * width + goal_x];
-//     if (goal_node.parent_x == -1 || goal_node.parent_y == -1) {
-//         *length = 0;
-//         return;
-//     }
-
-//     int count = 0;
-//     int current_x = goal_x;
-//     int current_y = goal_y;
-//     bool reached_start = false;
-
-//     while (true) {
-//         count++;
-//         if (current_x == start_x && current_y == start_y) {
-//             reached_start = true;
-//             break;
-//         }
-
-//         Node node = grid[current_y * width + current_x];
-//         if (node.parent_x == -1 || node.parent_y == -1) {
-//             break;
-//         }
-//         current_x = node.parent_x;
-//         current_y = node.parent_y;
-//     }
-
-//     *length = reached_start ? count : 0;
-// }
-
-// __global__ void reconstructPath(Node* grid, int width, int height, int start_x, int start_y, int goal_x, int goal_y, int2* path, int length) {
-//     if (length == 0) return;
-
-//     int current_x = goal_x;
-//     int current_y = goal_y;
-//     int index = length - 1; // Fill from end (start) to beginning (goal)
-
-//     while (index >= 0) {
-//         path[index].x = current_x;
-//         path[index].y = current_y;
-//         index--;
-
-//         if (current_x == start_x && current_y == start_y) break;
-
-//         Node node = grid[current_y * width + current_x];
-//         current_x = node.parent_x;
-//         current_y = node.parent_y;
-//     }
-// }
+    while (x != start_x || y != start_y) {
+        if (count >= max_length) break;
+        path[count++] = make_int2(x, y);
+        
+        int idx = y * width + x;
+        int px = grid[idx].parent_x;
+        int py = grid[idx].parent_y;
+        
+        if (px == -1 || py == -1) break;
+        x = px;
+        y = py;
+    }
+    
+    if (x == start_x && y == start_y) {
+        path[count++] = make_int2(x, y);
+    }
+    *path_length = count;
+}

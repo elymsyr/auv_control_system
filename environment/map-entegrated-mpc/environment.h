@@ -30,7 +30,7 @@
 
 struct Node {
     int x, y;
-    float g, h, f;
+    float g, h;
     int parent_x, parent_y;
     int status;
 };
@@ -70,7 +70,7 @@ public:
 
     // astar
     // void updateGrid();
-    // Path findPath();
+    Path findPath(int goal_x, int goal_y);
     void copyNodeToHost(float* host_buffer, const char mode = 'f') const;
 
     int width_;
@@ -85,6 +85,7 @@ public:
     float centre_move_factor_ = 0.0f;
     float circle_radius_ = 10.0f;
     int number_obs_to_feed_ = 50;
+    int max_iter_ = 1000;
 
 private:
     float round_;
@@ -112,11 +113,10 @@ __global__ void singlePointUpdateKernel(uint8_t* grid, int width, int height, fl
 __global__ void obstacleSelectionKernel(uint8_t* grid, int width, int height, float wx, float wy, float* output_dists, float2* output_coords, int* output_count, int max_output, float circle_radius, float r_m_);
 
 // astar kernel
-__device__ void atomicMinFloat(float* address, float val);
+__device__ float atomicMinFloat(float* address, float val);
 __global__ void initKernel(Node* grid, int width, int height);
-__global__ void setGoalKernel(Node* grid, uint8_t* map, int width, int height, int goal_x, int goal_y);
-// __global__ void aStarKernel(Node* grid, uint8_t* obstacles, int width, int height, int start_x, int start_y, int goal_x, int goal_y);
-// __global__ void computePathLength(Node* grid, int width, int height, int start_x, int start_y, int goal_x, int goal_y, int* length);
-// __global__ void reconstructPath(Node* grid, int width, int height, int start_x, int start_y, int goal_x, int goal_y, int2* path, int length);
+__global__ void resetGridKernel(Node* grid, uint8_t* map, int width, int height, int goal_x, int goal_y);
+__global__ void wavefrontKernel(Node* grid, int width, int height, int* d_updated);
+__global__ void reconstructPathKernel(Node* grid, int2* path, int* path_length, int start_x, int start_y, int goal_x, int goal_y, int width);
 
 #endif
