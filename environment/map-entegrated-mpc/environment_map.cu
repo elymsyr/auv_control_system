@@ -11,6 +11,8 @@ EnvironmentMap::EnvironmentMap(int width, int height) : width_(width), height_(h
     shift_ = init;
     shift_total_ = init;
     world_position_ = make_float3(0.0f, 0.0f, 0.0f);
+    start_x = width_ / 2;
+    start_y = height_ / 2;
     size_t size = width * height * sizeof(uint8_t);
     cudaMalloc(&grid_, size);
     cudaMalloc(&tempGrid_, size);
@@ -145,8 +147,7 @@ void EnvironmentMap::slide(float x, float y) {
     shift_total_.y += shift_.y;
 
     std::cout << "world_position_: " << world_position_.x << ", " << world_position_.y << "\n"
-                << "shift_total_: " << shift_total_.x << ", " << shift_total_.y << "\n"
-                << "shift_: " << shift_.x << ", " << shift_.y << "\n";
+                << "shift_total_: " << shift_total_.x << ", " << shift_total_.y << "\n";
 
     dim3 threads(16, 16);
     dim3 blocks((width_ + threads.x - 1) / threads.x,

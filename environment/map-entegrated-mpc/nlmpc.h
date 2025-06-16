@@ -20,7 +20,7 @@ public:
 private:
     VehicleModel model_;
     int nx_, nu_;
-    double dt_, obstacle_weight_, obstacle_epsilon_, min_dist_, vehicle_radius_;
+    double dt_, obstacle_weight_, obstacle_epsilon_, min_dist_;
     Opti opti_;
     MX X_, U_, eps_, obs_param_;
     MX x0_param_, x_ref_param_;

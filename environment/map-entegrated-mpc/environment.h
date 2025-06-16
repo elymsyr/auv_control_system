@@ -97,6 +97,8 @@ private:
     float* d_prior;
     float2* d_coords;
     int* d_count;
+    int start_x;
+    int start_y;
 
     // astar
     void initializeGrid();
@@ -105,6 +107,9 @@ private:
 // map helper
 float2 move_to(float x1, float y1, float x2, float y2, float factor);
 float distance(float x1, float y1, float x2, float y2);
+float angleBetweenPoints(float fromX, float fromY, float toX, float toY);
+float2 createPath(int m, float k, float spacing, const EnvironmentMap& map, const Path& path);
+void drawDirection(EnvironmentMap& map, float x, float y, float angle, float length = 1.0f, float value = 200.0f);
 
 // map kernel
 __global__ void slidePhase1(uint8_t* grid, uint8_t* tempGrid, int width, int height, int2 shift);

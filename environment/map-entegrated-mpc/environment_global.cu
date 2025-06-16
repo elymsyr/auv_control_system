@@ -13,8 +13,8 @@ __global__ void slidePhase1(uint8_t* grid, uint8_t* tempGrid, int width, int hei
     if (tx >= width || ty >= height) return;
 
     int dst_idx = ty * width + tx;
-    int src_x = tx - shift.x;
-    int src_y = ty - shift.y;
+    int src_x = tx + shift.x;
+    int src_y = ty + shift.y;
 
     if (src_x >= 0 && src_x < width && src_y >= 0 && src_y < height) {
         tempGrid[dst_idx] = grid[src_y * width + src_x];
@@ -129,7 +129,7 @@ __global__ void initKernel(Node* grid, int width, int height) {
     Node* node = &grid[index];
     node->x = idx;
     node->y = idy;
-    node->g = sqrtf(powf(idx - width / 2, 2) + powf(idy - height / 2, 2));
+    node->g = FLT_MAX;
     node->h = FLT_MAX;
     node->parent_x = -1;
     node->parent_y = -1;
@@ -143,14 +143,18 @@ __global__ void resetGridKernel(Node* grid, uint8_t* map, int width, int height,
 
     int index = idy * width + idx;
     Node* node = &grid[index];
+    
     node->parent_x = -1;
     node->parent_y = -1;
-    node->h = sqrtf(powf(idx - goal_x, 2) + powf(idy - goal_y, 2));
-    if (map[index] >= 250) {
-        node->status = 0;
+    
+    if (idx == goal_x && idy == goal_y) {
+        node->g = 0.0f;  // Goal cost is 0
+        node->status = 1; // Goal is traversable
     } else {
-        node->status = 1;
+        node->g = FLT_MAX;
+        node->status = (map[index] >= 250) ? 0 : 1;
     }
+    node->h = sqrtf(powf(idx - goal_x, 2) + powf(idy - goal_y, 2));
 }
 
 __global__ void wavefrontKernel(Node* grid, int width, int height, int* d_updated) {
@@ -160,7 +164,13 @@ __global__ void wavefrontKernel(Node* grid, int width, int height, int* d_update
     
     int index = idy * width + idx;
     Node* node = &grid[index];
-    if (node->status != 1) return;  // Only process free nodes
+    
+    // Only process free nodes that aren't the goal
+    if (node->status != 1 || node->g == 0.0f) return;
+
+    float min_g = FLT_MAX;
+    int best_px = -1;
+    int best_py = -1;
 
     // Check 8 neighbors
     for (int dy = -1; dy <= 1; dy++) {
@@ -173,30 +183,41 @@ __global__ void wavefrontKernel(Node* grid, int width, int height, int* d_update
             
             int nidx = ny * width + nx;
             Node* neighbor = &grid[nidx];
-            if (neighbor->status == 0) continue;  // Skip obstacles
+            if (neighbor->status != 1) continue;  // Skip obstacles
             
-            float cost = (dx && dy) ? 1.4142f : 1.0f;
+            // Skip unvisited neighbors
+            if (neighbor->g == FLT_MAX) continue;
+
+            float cost = (dx != 0 && dy != 0) ? 1.4142f : 1.0f;
             float new_g = neighbor->g + cost;
             
-            // Capture the return value properly
-            float old_g = atomicMinFloat(&node->g, new_g);
-            
-            if (new_g < old_g) {
-                node->parent_x = nx;
-                node->parent_y = ny;
-                atomicMax(d_updated, 1);  // Mark update
+            if (new_g < min_g) {
+                min_g = new_g;
+                best_px = nx;
+                best_py = ny;
             }
         }
     }
+
+    // Update if we found a better path
+    if (min_g < node->g) {
+        node->g = min_g;
+        node->parent_x = best_px;
+        node->parent_y = best_py;
+        atomicOr(d_updated, 1);  // Mark update
+    }
 }
 
-__global__ void reconstructPathKernel(Node* grid, int2* path, int* path_length, int start_x, int start_y, int goal_x, int goal_y, int width) {
-    int x = goal_x;
-    int y = goal_y;
+__global__ void reconstructPathKernel(Node* grid, int2* path, int* path_length, 
+                                     int start_x, int start_y, int goal_x, int goal_y, 
+                                     int width) {
+    int x = start_x;
+    int y = start_y;
     int count = 0;
     int max_length = width * width;  // Safeguard
 
-    while (x != start_x || y != start_y) {
+    // Follow parent pointers from start to goal
+    while (x != goal_x || y != goal_y) {
         if (count >= max_length) break;
         path[count++] = make_int2(x, y);
         
@@ -209,7 +230,8 @@ __global__ void reconstructPathKernel(Node* grid, int2* path, int* path_length, 
         y = py;
     }
     
-    if (x == start_x && y == start_y) {
+    // Add final goal point if reached
+    if (x == goal_x && y == goal_y) {
         path[count++] = make_int2(x, y);
     }
     *path_length = count;

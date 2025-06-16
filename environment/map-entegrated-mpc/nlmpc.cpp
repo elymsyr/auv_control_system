@@ -9,8 +9,8 @@ using namespace casadi;
 
 NonlinearMPC::NonlinearMPC(const VehicleModel& model, int N, double dt)
     : model_(model), N_(N), dt_(dt), nx_(12), nu_(8), 
-      prev_sol_(std::nullopt), obstacle_weight_(1.1), 
-      obstacle_epsilon_(0.1), num_obstacles_(5), min_dist_(2), vehicle_radius_(2.0) {
+      prev_sol_(std::nullopt), obstacle_weight_(8.0), 
+      obstacle_epsilon_(1e-4), num_obstacles_(5), min_dist_(3.0) {
     setup_optimization();
 }
 
@@ -111,19 +111,19 @@ void NonlinearMPC::setup_optimization() {
     }
     dynamics_func = external("dynamics_func", "./libdynamics_func.so", external_options);
 
-    MX Q = MX::diag(MX::vertcat({2.0, 2.0, 2.0, 1.0, 1.0, 1.0,
-                                    0.1, 0.1, 0.1, 0.1, 0.1, 0.1}));
-    MX R = MX::diag(MX(std::vector<double>(8, 0.1)));
+    MX Q = MX::diag(MX::vertcat({4.0, 4.0, 4.0, 1.0, 1.5, 3.0,
+                                    0.0, 0.0, 0.0, 0.1, 0.1, 0.1}));
+    MX R = MX::diag(MX(std::vector<double>(8, 0.2)));
 
     MX cost = 0;
     for (int k = 0; k <= N_; ++k) {
         MX state_error = X_(Slice(), k) - x_ref_param_(Slice(), k);
         cost += mtimes(mtimes(state_error.T(), Q), state_error);
         
-        // if (k > 0 && k < N_) {
-        //     MX pos = X_(Slice(0, 2), k);
-        //     cost += obstacle_weight_ * barrier_function(pos, obs_param_);
-        // }
+        if (k > 0 && k < N_) {
+            MX pos = X_(Slice(0, 2), k);
+            cost += obstacle_weight_ * barrier_function(pos, obs_param_);
+        }
 
         if (k < N_) {
             cost += mtimes(mtimes(U_(Slice(), k).T(), R), U_(Slice(), k));
@@ -185,12 +185,12 @@ void NonlinearMPC::setup_optimization() {
         {"ipopt.print_level", 2},
         {"print_time", 0},
         {"ipopt.sb", "yes"},
-        {"ipopt.max_iter", 1000},          // Increased iterations
-        {"ipopt.tol", 1e-4},               // Looser tolerance
-        {"ipopt.linear_solver", "mumps"},   // Better for nonlinear problems
-        {"ipopt.mu_init", 1e-3},           // Smaller initial barrier
-        {"ipopt.acceptable_tol", 1e-3},    // Looser acceptance tol
-        {"ipopt.constr_viol_tol", 1e-4},   // Constraint violation tol
+        {"ipopt.max_iter", 2000},             // Increased iterations
+        {"ipopt.tol", 1e-4},                  // Looser tolerance
+        {"ipopt.linear_solver", "mumps"},     // Better for nonlinear problems
+        {"ipopt.mu_init", 1e-2},              // Smaller initial barrier
+        {"ipopt.acceptable_tol", 1e-5},       // Looser acceptance tol
+        // {"ipopt.constr_viol_tol", 1e-5},   // Constraint violation tol
         {"ipopt.hessian_approximation", "limited-memory"},
         {"ipopt.nlp_scaling_method", "gradient-based"},
     };
@@ -212,12 +212,11 @@ MX NonlinearMPC::barrier_function(const MX& position, const MX& obstacles) {
         MX dist = sqrt(dist_sq + obstacle_epsilon_);
         
         // Quadratic-quadratic barrier function
-        MX safety_dist = min_dist_ + vehicle_radius_;
-        MX delta = safety_dist - dist;
+        MX delta = min_dist_ - dist;
         
         // Only penalize when closer than safety distance
         total_penalty += if_else(delta > 0, 
-                                 obstacle_weight_ * delta*delta / (dist_sq + 0.1), 
+                                 obstacle_weight_ * delta*delta / (dist_sq + obstacle_epsilon_), 
                                  0);
     }
     return total_penalty;
@@ -244,7 +243,7 @@ void NonlinearMPC::avoidance_constraints(const MX& position, const MX& obstacles
         MX dist_sq = dx*dx + dy*dy;
         
         // Safety distance including vehicle size
-        MX safety_dist = min_dist_ + vehicle_radius_;
+        MX safety_dist = min_dist_;
         MX min_dist_sq = safety_dist * safety_dist;
         
         // Add constraint: distance^2 >= min_dist^2

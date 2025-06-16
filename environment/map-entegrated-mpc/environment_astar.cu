@@ -17,18 +17,17 @@ void EnvironmentMap::initializeGrid() {
 }
 
 Path EnvironmentMap::findPath() {
-    int start_x = width_ / 2;
-    int start_y = height_ / 2;
-
-    dim3 block(16, 16);
-    dim3 grid((width_ + 15) / 16, (height_ + 15) / 16);
-
+    // Convert world goal to grid coordinates
     int goal_x = (ref_.x - world_position_.x) / r_m_ + width_ / 2;
-    goal_x = std::max(0, std::min(goal_x, width_ - 1));
     int goal_y = (ref_.y - world_position_.y) / r_m_ + height_ / 2;
+    goal_x = std::max(0, std::min(goal_x, width_ - 1));
     goal_y = std::max(0, std::min(goal_y, height_ - 1));
 
     // Step 1: Reset grid
+    dim3 block(16, 16);
+    dim3 grid((width_ + block.x - 1) / block.x, 
+              (height_ + block.y - 1) / block.y);
+              
     resetGridKernel<<<grid, block>>>(node_grid_, grid_, width_, height_, goal_x, goal_y);
     CUDA_CALL(cudaDeviceSynchronize());
 
@@ -42,6 +41,7 @@ Path EnvironmentMap::findPath() {
         CUDA_CALL(cudaMemcpy(d_updated, &h_updated, sizeof(int), cudaMemcpyHostToDevice));
         
         wavefrontKernel<<<grid, block>>>(node_grid_, width_, height_, d_updated);
+        CUDA_CALL(cudaDeviceSynchronize());
         CUDA_CALL(cudaMemcpy(&h_updated, d_updated, sizeof(int), cudaMemcpyDeviceToHost));
     }
 
@@ -54,15 +54,15 @@ Path EnvironmentMap::findPath() {
     
     reconstructPathKernel<<<1, 1>>>(node_grid_, d_path, d_path_length, 
                                    start_x, start_y, goal_x, goal_y, width_);
+    CUDA_CALL(cudaDeviceSynchronize());
     
     int path_length;
     CUDA_CALL(cudaMemcpy(&path_length, d_path_length, sizeof(int), cudaMemcpyDeviceToHost));
     
     int2* h_path = new int2[path_length];
-    CUDA_CALL(cudaMemcpy(h_path, d_path, path_length * sizeof(int2), cudaMemcpyDeviceToHost));
-
-    // Reverse path (start->goal)
-    // std::reverse(h_path, h_path + path_length);
+    if (path_length > 0) {
+        CUDA_CALL(cudaMemcpy(h_path, d_path, path_length * sizeof(int2), cudaMemcpyDeviceToHost));
+    }
 
     // Cleanup
     CUDA_CALL(cudaFree(d_updated));
