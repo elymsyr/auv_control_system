@@ -59,12 +59,12 @@
                 },
                 "force_range_r": {
                     "unit": "newton_meter",
-                    "max": 50.0
+                    "max": 30.0
                 }
             }
         },
         "mass": {
-            "value": 6.0,
+            "value": 11.0,
             "unit": "kilogram"
         },
         "added_mass": {
@@ -88,13 +88,13 @@
         },
         "dimensions": {
             "unit": "meter",
-            "width": 0.4,
-            "height": 0.3,
-            "length": 0.6,
-            "lm": 0.3,
+            "width": 0.415,
+            "height": 0.305,
+            "length": 0.5054,
+            "lm": 0.2,
             "wf": 0.2,
             "lr": 0.3,
-            "rf": 0.25
+            "rf": 0.1
         },
         "center_of_buoancy": {
             "unit": "meter",

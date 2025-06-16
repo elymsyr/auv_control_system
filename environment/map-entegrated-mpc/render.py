@@ -162,20 +162,11 @@ def load_data():
         # ref_x, ref_y, ref_z
         ref_history.append([row[0], row[1], row[2]])
         ref_yaw_history.append(row[5])
-    # Load path history
-    path_history = []
-    with open('path_history.txt', 'r') as f:
-        for line in f:
-            points = line.strip().split()
-            if points:
-                path_history.append(np.array([float(p) for p in points]))
-            else:
-                path_history.append(np.array([]))
 
-    return np.array(state_history), np.array(ref_history), np.array(ref_yaw_history), path_history
+    return np.array(state_history), np.array(ref_history), np.array(ref_yaw_history)
 
 render = Render()
-state_history, ref_history, ref_yaw_history, path_history = load_data()
+state_history, ref_history, ref_yaw_history = load_data()
 for (eta, ref, ref_yaw) in zip(state_history, ref_history, ref_yaw_history):
     render.render(eta, ref, desired_yaw=ref_yaw)
 render.close()

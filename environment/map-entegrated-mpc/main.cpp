@@ -23,7 +23,6 @@ DM obstacles_to_dm(const std::vector<std::pair<float, float>>& obstacles);
 int main() {
     std::ofstream state_file("state_history.txt");
     std::ofstream ref_file("reference_history.txt");
-    std::ofstream path_file("path_history.txt");
 
     // Create environment map
     const int WIDTH = 129;
@@ -64,11 +63,63 @@ int main() {
         double eta6 = static_cast<float>(static_cast<double>(x0(5)));
         map.updateSinglePoint(eta1, eta2, 200.0f);
         map.slide(eta1, eta2);
-
-        std::vector<std::pair<float, float>> obstacles = map.obstacle_selection(mpc.num_obstacles_);
+        
+        map.set_ref(ref_x, ref_y);
         Path path = map.findPath();
         int m = std::min(path.length, N+1);
         float spacing = static_cast<float>(std::min((m-1) / (N), 4));
+
+        std::vector<float2> path_points;
+        for (int k = 0; k < m; k++) {
+            path_points.push_back(createPath(m, k, spacing, map, path));
+        }
+
+        for (int k = 0; k <= N; k++) {
+            // Get current position in reference trajectory
+            float2 world_coor = (k < m) ? path_points[k] : make_float2(ref_x, ref_y);
+            
+            // Calculate yaw using improved method
+            float angle;
+            if (k < m - 1) {
+                // Use next point in path
+                float2 next_coor = path_points[k+1];
+                angle = atan2f(next_coor.y - world_coor.y, next_coor.x - world_coor.x);
+            }
+            else if (k == m - 1 && m >= 2) {
+                // Use previous point for last path point
+                float2 prev_coor = path_points[k-1];
+                angle = atan2f(world_coor.y - prev_coor.y, world_coor.x - prev_coor.x);
+            }
+            else {
+                // For beyond path or single-point paths
+                angle = atan2f(ref_y - eta2, ref_x - eta1);
+            }
+
+            // Handle degenerate cases
+            if (std::isnan(angle)) {
+                angle = (k > 0) ? static_cast<double>(x_ref(5, k-1)) : eta6;
+                std::cerr << "Warning: NaN angle at step " << step << ", using previous angle: " << angle << "\n";
+            }
+
+            // Apply low-pass filter for smoother transitions
+            if (k > 0) {
+                float prev_angle = static_cast<double>(x_ref(5, k-1));
+                float diff = angle - prev_angle;
+                
+                // Normalize angle difference to [-π, π]
+                if (diff > M_PI) diff -= 2*M_PI;
+                if (diff < -M_PI) diff += 2*M_PI;
+                
+                // Apply smoothing (adjust 0.2-0.3 for different responsiveness)
+                angle = prev_angle + 0.3 * diff;
+            }
+
+            // Set references
+            x_ref(0, k) = world_coor.x;
+            x_ref(1, k) = world_coor.y;
+            x_ref(5, k) = angle;
+            if (step >= max_step-1) map.updateSinglePoint(world_coor.x, world_coor.y, 49.0f);
+        }
 
         state_file << static_cast<double>(x0(0)) << " "    // ref_x
                    << static_cast<double>(x0(1)) << " "    // ref_y
@@ -77,68 +128,30 @@ int main() {
                    << static_cast<double>(x0(4)) << " "    // ref_pitch
                    << static_cast<double>(x0(5)) << "\n";  // ref_yaw
         
-        ref_file << static_cast<double>(x_ref(0, spacing)) << " "    // ref_x
-                 << static_cast<double>(x_ref(1, spacing)) << " "    // ref_y
-                 << static_cast<double>(x_ref(2, spacing)) << " "    // ref_z
-                 << static_cast<double>(x_ref(2, spacing)) << " "    // ref_roll
-                 << static_cast<double>(x_ref(2, spacing)) << " "    // ref_pitch
-                 << static_cast<double>(x_ref(2, spacing)) << "\n";  // ref_yaw
-        
-        // Save path points
-        if (path.length > 0) {
-            for (int i = 0; i < path.length; i++) {
-                float grid_x = path.points[i].x;
-                float grid_y = path.points[i].y;
-                float world_x = (grid_x - map.width_/2.0f) * map.r_m_ + map.world_position_.x;
-                float world_y = (grid_y - map.height_/2.0f) * map.r_m_ + map.world_position_.y;
-                path_file << world_x << " " << world_y << " ";
-            }
-        }
-        path_file << "\n";
+        ref_file << static_cast<double>(x_ref(0, 0)) << " "    // ref_x
+                 << static_cast<double>(x_ref(1, 0)) << " "    // ref_y
+                 << static_cast<double>(x_ref(2, 0)) << " "    // ref_z
+                 << static_cast<double>(x_ref(3, 0)) << " "    // ref_roll
+                 << static_cast<double>(x_ref(4, 0)) << " "    // ref_pitch
+                 << static_cast<double>(x_ref(5, 0)) << "\n";  // ref_yaw
 
-        float angle = angleBetweenPoints(eta1, eta2, ref_x, ref_y);
-        if (path.length > 0) {
-            for (int k = 0; k <= N; k++) {
-                float2 world_coor = createPath(m, k, spacing, map, path);
-                // Set reference
-                x_ref(0, k) = world_coor.x;
-                x_ref(1, k) = world_coor.y;
-                if (k+spacing <= path.length) {
-                    float2 next_coor = createPath(m, k+spacing, spacing, map, path);
-                    angle = angleBetweenPoints(world_coor.x, world_coor.y, next_coor.x, next_coor.y);
-                }
-                x_ref(2, k) = angle;
-                if (step >= max_step-1 || step < 1) map.updateSinglePoint(world_coor.x, world_coor.y, 50.0f);
-            }
-        } else {
-            // Fallback: use original fixed reference
-            for (int k = 0; k <= N; k++) {
-                x_ref(0, k) = ref_x;
-                x_ref(1, k) = ref_y;
-                x_ref(2, k) = angle;
-            }
-            std::cerr << "Warning: No path found, using fixed reference\n";
-        }
-
-        map.set_ref(ref_x, ref_y);
-        DM obs_dm = obstacles_to_dm(obstacles);
-
-        auto [u_opt, x_opt] = mpc.solve(x0, x_ref, obs_dm);
+        auto [u_opt, x_opt] = mpc.solve(x0, x_ref);
 
         x0 = x_opt(Slice(), 1);
         auto state_error = x_ref(Slice(), 0) - x0;
 
         std::cout << "Step " << step << "\n"
-                    << "  controls: " << u_opt << "\n"
-                    << "  state: " << x0 << "\n"
-                    << "  state error: " << state_error << "\n";
-        
+                    << "  Controls: " << u_opt << "\n"
+                    << "  State: " << x0 << "\n"
+                    << "  Reference: " << x_ref(Slice(), 0) << "\n"
+                    << "  Path Lenth: " << path.length << "\n"
+                    << "  State Error: " << state_error << "\n";
+
         // Save current state and reference
         if (step >= max_step-1 || step < 1) map.save(std::to_string(step));
     }
     state_file.close();
     ref_file.close();
-    path_file.close();
     return 0;
 }
 

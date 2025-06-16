@@ -9,23 +9,13 @@ using namespace casadi;
 
 NonlinearMPC::NonlinearMPC(const VehicleModel& model, int N, double dt)
     : model_(model), N_(N), dt_(dt), nx_(12), nu_(8), 
-      prev_sol_(std::nullopt), obstacle_weight_(8.0), 
-      obstacle_epsilon_(1e-4), num_obstacles_(5), min_dist_(3.0) {
+      prev_sol_(std::nullopt) {
     setup_optimization();
 }
 
-std::pair<DM, DM> NonlinearMPC::solve(const DM& x0, const DM& x_ref, const DM& obs_positions) {
+std::pair<DM, DM> NonlinearMPC::solve(const DM& x0, const DM& x_ref) {
     opti_.set_value(x0_param_, x0);
     opti_.set_value(x_ref_param_, x_ref);
-    
-    // Set obstacle positions if provided
-    if (obs_positions.size1() == 2 && obs_positions.size2() == num_obstacles_) {
-        opti_.set_value(obs_param_, obs_positions);
-    } else {
-        // Default to distant obstacles if no valid positions
-        DM default_obs = DM::repmat(DM(std::vector<double>{10000.0, 10000.0}), 1, num_obstacles_);
-        opti_.set_value(obs_param_, default_obs);
-    }
 
     // Improved warm-start initialization
     if (prev_sol_.has_value()) {
@@ -58,10 +48,6 @@ std::pair<DM, DM> NonlinearMPC::solve(const DM& x0, const DM& x_ref, const DM& o
             DM fallback_X = 0.5*prev_sol_->value(X_) + 0.5*DM::repmat(x0, 1, N_+1);
             return {fallback_U(Slice(), 0), fallback_X};
         }
-        // if (!sol.stats().at("success")) {
-        //     std::cout << "Solver status: " << sol.stats().at("return_status") << "\n";
-        //     std::cout << "Final cost: " << sol.value(cost) << "\n";
-        // }
         return {DM::zeros(nu_), DM::repmat(x0, 1, N_+1)};
     }
 }
@@ -71,8 +57,6 @@ void NonlinearMPC::setup_optimization() {
     U_ = opti_.variable(nu_, N_);
     x0_param_ = opti_.parameter(nx_);
     x_ref_param_ = opti_.parameter(nx_, N_+1);
-
-    obs_param_ = opti_.parameter(2, num_obstacles_);
     
     // Pre-build dynamics function once (using RK4 integration)
     MX eta_sym = MX::sym("eta", 6);
@@ -111,29 +95,19 @@ void NonlinearMPC::setup_optimization() {
     }
     dynamics_func = external("dynamics_func", "./libdynamics_func.so", external_options);
 
-    MX Q = MX::diag(MX::vertcat({4.0, 4.0, 4.0, 1.0, 1.5, 3.0,
-                                    0.0, 0.0, 0.0, 0.1, 0.1, 0.1}));
-    MX R = MX::diag(MX(std::vector<double>(8, 0.2)));
+    MX Q = MX::diag(MX::vertcat({2.0, 2.0, 2.0, 1.0, 1.0, 2.0,
+                                    0.0, 1.0, 1.0, 0.1, 0.1, 0.1}));
+    MX R = MX::diag(MX(std::vector<double>(8, 0.1)));
 
     MX cost = 0;
     for (int k = 0; k <= N_; ++k) {
         MX state_error = X_(Slice(), k) - x_ref_param_(Slice(), k);
         cost += mtimes(mtimes(state_error.T(), Q), state_error);
-        
-        if (k > 0 && k < N_) {
-            MX pos = X_(Slice(0, 2), k);
-            cost += obstacle_weight_ * barrier_function(pos, obs_param_);
-        }
 
         if (k < N_) {
             cost += mtimes(mtimes(U_(Slice(), k).T(), R), U_(Slice(), k));
         }
     }
-
-    // for (int k = 0; k <= N_; ++k) {
-    //     MX pos = X_(Slice(0, 2), k);
-    //     avoidance_constraints(pos, obs_param_);
-    // }
     
     for (int k = 0; k < N_; ++k) {
         MX x_k = X_(Slice(), k);
@@ -195,58 +169,4 @@ void NonlinearMPC::setup_optimization() {
         {"ipopt.nlp_scaling_method", "gradient-based"},
     };
     opti_.solver("ipopt", opts);
-}
-
-MX NonlinearMPC::barrier_function(const MX& position, const MX& obstacles) {
-    MX total_penalty = 0;
-    MX x = position(0);
-    MX y = position(1);
-    
-    for (int i = 0; i < num_obstacles_; ++i) {
-        MX obs_x = obstacles(0, i);
-        MX obs_y = obstacles(1, i);
-        
-        MX dx = x - obs_x;
-        MX dy = y - obs_y;
-        MX dist_sq = dx*dx + dy*dy;
-        MX dist = sqrt(dist_sq + obstacle_epsilon_);
-        
-        // Quadratic-quadratic barrier function
-        MX delta = min_dist_ - dist;
-        
-        // Only penalize when closer than safety distance
-        total_penalty += if_else(delta > 0, 
-                                 obstacle_weight_ * delta*delta / (dist_sq + obstacle_epsilon_), 
-                                 0);
-    }
-    return total_penalty;
-}
-
-void NonlinearMPC::set_obstacle_weight(double weight) {
-    obstacle_weight_ = weight;
-}
-
-void NonlinearMPC::set_obstacle_epsilon(double epsilon) {
-    obstacle_epsilon_ = epsilon;
-}
-
-void NonlinearMPC::avoidance_constraints(const MX& position, const MX& obstacles) {
-    MX x = position(0);
-    MX y = position(1);
-    
-    for (int i = 0; i < num_obstacles_; ++i) {
-        MX obs_x = obstacles(0, i);
-        MX obs_y = obstacles(1, i);
-        
-        MX dx = x - obs_x;
-        MX dy = y - obs_y;
-        MX dist_sq = dx*dx + dy*dy;
-        
-        // Safety distance including vehicle size
-        MX safety_dist = min_dist_;
-        MX min_dist_sq = safety_dist * safety_dist;
-        
-        // Add constraint: distance^2 >= min_dist^2
-        opti_.subject_to(dist_sq >= min_dist_sq);
-    }
 }
