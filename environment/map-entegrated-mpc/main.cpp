@@ -28,8 +28,8 @@ int main() {
     const int WIDTH = 129;
     const int HEIGHT = 129;
     const int N = 20;
-    float ref_x = -14.0f;
-    float ref_y = -12.0f;
+    float ref_x = 39.0f;
+    float ref_y = 10.0f;
     EnvironmentMap map(WIDTH, HEIGHT);
     VehicleModel model("config.json"); 
     NonlinearMPC mpc(model, N);
@@ -47,6 +47,9 @@ int main() {
         map.updateSinglePoint(-3.2156f, 2.13459f, 255.0f);
         map.updateSinglePoint(5.025f, 1.8908f, 255.0f);
         map.updateSinglePoint(10.0506f, 4.34f, 255.0f);
+        map.updateSinglePoint(13.0506f, 12.34f, 255.0f);
+        map.updateSinglePoint(14.0506f, 1.34f, 255.0f);
+        map.updateSinglePoint(14.0506f, 9.34f, 255.0f);
         map.updateSinglePoint(ref_x, ref_y, 249.0f);
     }
 
@@ -55,7 +58,7 @@ int main() {
     map.set_ref(ref_x, ref_y);
     map.set_velocity(0.0f, 0.0f);
 
-    int max_step = 100;
+    int max_step = 200;
 
     for (int step = 0; step < max_step; ++step) {
         double eta1 = static_cast<float>(static_cast<double>(x0(0)));
@@ -67,7 +70,7 @@ int main() {
         map.set_ref(ref_x, ref_y);
         Path path = map.findPath();
         int m = std::min(path.length, N+1);
-        float spacing = static_cast<float>(std::min((m-1) / (N), 4));
+        float spacing = static_cast<float>(std::min((m-1) / (N), 10));
 
         std::vector<float2> path_points;
         for (int k = 0; k < m; k++) {
@@ -118,7 +121,7 @@ int main() {
             x_ref(0, k) = world_coor.x;
             x_ref(1, k) = world_coor.y;
             x_ref(5, k) = angle;
-            if (step >= max_step-1) map.updateSinglePoint(world_coor.x, world_coor.y, 49.0f);
+            if (step < 2) map.updateSinglePoint(world_coor.x, world_coor.y, 49.0f);
         }
 
         state_file << static_cast<double>(x0(0)) << " "    // ref_x
@@ -148,7 +151,7 @@ int main() {
                     << "  State Error: " << state_error << "\n";
 
         // Save current state and reference
-        if (step >= max_step-1 || step < 1) map.save(std::to_string(step));
+        if (step >= max_step-1 || step%55 == 0 || step < 1) map.save(std::to_string(step));
     }
     state_file.close();
     ref_file.close();

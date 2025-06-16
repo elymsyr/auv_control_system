@@ -95,9 +95,9 @@ void NonlinearMPC::setup_optimization() {
     }
     dynamics_func = external("dynamics_func", "./libdynamics_func.so", external_options);
 
-    MX Q = MX::diag(MX::vertcat({2.0, 2.0, 2.0, 1.0, 1.0, 2.0,
-                                    0.0, 1.0, 1.0, 0.1, 0.1, 0.1}));
-    MX R = MX::diag(MX(std::vector<double>(8, 0.1)));
+    MX Q = MX::diag(MX::vertcat({4.0, 4.0, 5.0, 2.0, 2.0, 2.5,
+                                    0.0, 2.0, 0.1, 0.1, 0.1, 0.1}));
+    MX R = MX::diag(MX::vertcat({0.1, 0.1, 0.1, 0.1, 0.05, 0.05, 0.05, 0.05}));
 
     MX cost = 0;
     for (int k = 0; k <= N_; ++k) {
@@ -107,6 +107,27 @@ void NonlinearMPC::setup_optimization() {
         if (k < N_) {
             cost += mtimes(mtimes(U_(Slice(), k).T(), R), U_(Slice(), k));
         }
+
+        MX pos_error = X_(Slice(0,2), k) - x_ref_param_(Slice(0,2), k);
+        MX heading_error = X_(5,k) - x_ref_param_(5,k);
+        
+        // Cross-track error (perpendicular distance)
+        MX dx = cos(x_ref_param_(5,k));
+        MX dy = sin(x_ref_param_(5,k));
+        MX cte = dy*(X_(0,k)-x_ref_param_(0,k)) - dx*(X_(1,k)-x_ref_param_(1,k));
+        
+        cost += 5.0 * dot(pos_error, pos_error);  // Position error
+        cost += 8.0 * heading_error*heading_error;  // Heading error
+        cost += 10.0 * cte*cte;  // Cross-track error
+        
+        if (k < N_) {
+            cost += 0.1 * dot(U_(Slice(), k), U_(Slice(), k));
+        }
+    }
+
+    for (int k = 0; k < N_-1; ++k) {
+        MX du = U_(Slice(), k+1) - U_(Slice(), k);
+        cost += 0.05 * dot(du, du);
     }
     
     for (int k = 0; k < N_; ++k) {
@@ -137,9 +158,9 @@ void NonlinearMPC::setup_optimization() {
     double p_front = model_.get_p_front_mid_max();
     double p_rear  = model_.get_p_rear_max();
     for (int k = 0; k < N_; ++k) {
-        opti_.subject_to(opti_.bounded(-p_front, U_(Slice(0, 2), k), p_front));
+        opti_.subject_to(opti_.bounded(-p_rear, U_(Slice(0, 2), k), p_rear));
         opti_.subject_to(opti_.bounded(-p_rear, U_(Slice(2, 4), k), p_rear));
-        opti_.subject_to(opti_.bounded(-p_front, U_(Slice(4, 8), k), p_front));
+        opti_.subject_to(opti_.bounded(-p_rear, U_(Slice(4, 8), k), p_rear));
     }
 
     opti_.minimize(cost);
@@ -159,11 +180,11 @@ void NonlinearMPC::setup_optimization() {
         {"ipopt.print_level", 2},
         {"print_time", 0},
         {"ipopt.sb", "yes"},
-        {"ipopt.max_iter", 2000},             // Increased iterations
-        {"ipopt.tol", 1e-4},                  // Looser tolerance
+        {"ipopt.max_iter", 4000},             // Increased iterations
+        {"ipopt.tol", 1e-2},                  // Looser tolerance
         {"ipopt.linear_solver", "mumps"},     // Better for nonlinear problems
-        {"ipopt.mu_init", 1e-2},              // Smaller initial barrier
-        {"ipopt.acceptable_tol", 1e-5},       // Looser acceptance tol
+        {"ipopt.mu_init", 1e-1},              // Smaller initial barrier
+        {"ipopt.acceptable_tol", 1e-2},       // Looser acceptance tol
         // {"ipopt.constr_viol_tol", 1e-5},   // Constraint violation tol
         {"ipopt.hessian_approximation", "limited-memory"},
         {"ipopt.nlp_scaling_method", "gradient-based"},
