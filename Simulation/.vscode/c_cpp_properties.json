@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/home/eren/GitHub/Simulation",
+                "/home/eren/GitHub/Simulation/Control/include",
+                "/home/eren/GitHub/Simulation/Control/src",
+                "/usr/include",
+                "/usr/local/include",
+                "${CONDA_PREFIX}/include",
+                "/home/eren/miniconda3/envs/mppi/include",
+                "/usr/local/cuda-12.4/include"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/clang-18",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-clang-x64"
+        }
+    ],
+    "version": 4
+}

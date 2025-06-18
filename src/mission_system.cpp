@@ -1,5 +1,5 @@
 #include "mission_system.h"
-#include "EnvironmentMap.h"
+#include "environment.h"
 
 MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_code)
     : env_sub_(env_state, env_mtx), Subsystem(name, runtime, system_code) 

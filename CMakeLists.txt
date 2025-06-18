@@ -51,7 +51,12 @@ add_executable(control_system
     src/environment_system.cpp
     src/motion_system.cpp
     src/mission_system.cpp
-    src/env_map.cu             # <-- CUDA source that defines EnvironmentMap
+    src/environment_astar.cu
+    src/environment_global.cu
+    src/environment_helper.cpp
+    src/environment_map.cu
+    src/nlmpc.cpp
+    src/vehicle_model.cpp
 )
 
 # ─── CUDA-specific compile options ─────────────────────────────────────────────
