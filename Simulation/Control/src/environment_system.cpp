@@ -6,7 +6,7 @@
 using namespace casadi;
 
 EnvironmentSystem::EnvironmentSystem(std::string name, int runtime, unsigned int system_code)
-    : vehicle_model("/home/eren/GitHub/Simulation/Control/config.json"), motion_sub_(motion_state, motion_mtx), Subsystem(name, runtime, system_code)
+    : vehicle_model("/home/eren/GitHub/ControlSystem/Simulation/Control/config.json"), motion_sub_(motion_state, motion_mtx), Subsystem(name, runtime, system_code)
 {
     // Create dynamics function during construction
     auto dyn_pair = vehicle_model.dynamics(eta_sym, nu_sym, u_sym);

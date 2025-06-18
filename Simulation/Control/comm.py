@@ -360,10 +360,8 @@ class UnderwaterVehicleGUI:
                     try:
                         topic = socket.recv_string()
                         data = socket.recv()
-                        print(f"Received message on topic: {topic}")
-                        print(f"Raw data: {data}")
+                        # print(f"Received message on topic: {topic}")
                         self.last_received[topic.lower()] = time.time()
-                        print(topic, data)
                         self.root.after(0, self._process_message, topic, data)
                     except zmq.ZMQError as e:
                         self.log_message(f"Receive error: {str(e)}", 'error')

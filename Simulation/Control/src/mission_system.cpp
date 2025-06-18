@@ -2,7 +2,7 @@
 #include "environment.h"
 
 MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_code)
-    : env_sub_(env_state, env_mtx), Subsystem(name, runtime, system_code) 
+    : testsonar_sub_(testsonar_state, testsonar_mtx), env_sub_(env_state, env_mtx), Subsystem(name, runtime, system_code) 
 {
     for (int i = 0; i < 20 && !mission_pub_.is_bound() ; i++) {
         mission_pub_.bind("tcp://localhost:5561");
@@ -14,11 +14,18 @@ MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_
     }
     map_ = new EnvironmentMap(129, 129);
     env_state.set();
+    mission_state.set();
+    signal_state.set();
+    testsonar_state.set();
 }
 
 void MissionSystem::init_() {
     for (int i = 0; i < 20 && !env_sub_.is_running() ; i++) {
         env_sub_.connect("tcp://localhost:5560");
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    for (int i = 0; i < 20 && !testsonar_sub_.is_running() ; i++) {
+        testsonar_sub_.connect("tcp://localhost:7778");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
@@ -27,6 +34,7 @@ void MissionSystem::function() {
     std::lock_guard lk(mtx);
     signal_state.set();
     mission_state.set();
+    testsonar_state.set();
 }
 
 void MissionSystem::publish() {
@@ -39,5 +47,6 @@ void MissionSystem::halt() {
     mission_pub_.close();
     signal_pub_.close();
     env_sub_.close();
+    testsonar_sub_.close();
     initialized = false;
 }

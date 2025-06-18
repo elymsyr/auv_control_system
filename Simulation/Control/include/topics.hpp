@@ -136,4 +136,24 @@ struct SignalTopic {
     }
 };
 
+struct TestSonarTopic {
+    double detection[10];
+    double degree;
+    double timestamp = 0.0;
+
+    static constexpr const char* TOPIC = "TestSonar";
+
+    inline void set(const TestSonarTopic& o) {
+        std::memcpy(this, &o, sizeof(*this));
+    }
+
+    void set(const std::array<double, 10>& detection = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+              double degree = 0.0, 
+              double timestamp = 0.0) {
+        memcpy(this->detection, detection.data(), sizeof(this->detection));
+        this->degree = degree;
+        this->timestamp = timestamp;
+    }
+};
+
 #endif // TOPICS_H

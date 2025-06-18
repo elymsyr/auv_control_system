@@ -15,11 +15,13 @@ class MissionSystem : public Subsystem {
     Publisher<MissionTopic> mission_pub_;
     Publisher<SignalTopic> signal_pub_;
     Subscriber<EnvironmentTopic> env_sub_;
+    Subscriber<TestSonarTopic> testsonar_sub_;
     
 public:
     MissionTopic mission_state;
     SignalTopic signal_state;
     EnvironmentTopic env_state;
+    TestSonarTopic testsonar_state;
 
     MissionSystem(std::string name = "Mission", int runtime = 100, unsigned int system_code = 1);
     void init_() override;
@@ -34,7 +36,7 @@ protected:
     void updateMissionState();
     void updateSignalState();
     void publish() override;
-    std::mutex env_mtx;
+    std::mutex env_mtx, testsonar_mtx;
 };
 
 #endif // MISSION_H
