@@ -5,8 +5,8 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "/home/eren/GitHub/ControlSystem",
-                "/home/eren/GitHub/ControlSystem/include",
-                "${workspaceFolder}/include",
+                "/home/eren/GitHub/ControlSystem/Test/include",
+                "${workspaceFolder}/Test/include",
                 "/usr/include",
                 "/usr/local/include",
                 "${CONDA_PREFIX}/include",

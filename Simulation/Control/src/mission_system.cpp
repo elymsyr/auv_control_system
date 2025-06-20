@@ -31,14 +31,13 @@ void MissionSystem::init_() {
 }
 
 void MissionSystem::function() {
-    double* degree = testsonar_state.degree;
-    double* detections = testsonar_state.detection;
+    // double* degree = testsonar_state.degree;
+    // double* detections = testsonar_state.detection;
     
-    {
-        std::lock_guard lk(mtx);
+    // {
+    //     std::lock_guard lk(mtx);
 
-    }
-    
+    // }
 }
 
 void MissionSystem::publish() {

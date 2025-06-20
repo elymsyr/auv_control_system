@@ -4,7 +4,11 @@
 using namespace casadi;
 
 MotionSystem::MotionSystem(std::string name, int runtime, unsigned int system_code) 
-    : vehicle_model("/home/eren/GitHub/ControlSystem/Simulation/Control/config.json"), mpc(vehicle_model), mission_sub_(mission_state, mission_mtx), env_sub_(env_state, env_mtx), Subsystem(name, runtime, system_code) 
+    : Subsystem(name, runtime, system_code),
+      mpc("/home/eren/GitHub/Simulation/config.json", 40, 0.1),
+      mission_sub_(mission_state, mission_mtx),
+      env_sub_(env_state, env_mtx),
+      x0(DM::vertcat({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 {
     for (int i = 0; i < 20 && !motion_pub_.is_bound() ; i++) {
         motion_pub_.bind("tcp://localhost:5563");
@@ -23,16 +27,39 @@ void MotionSystem::init_() {
         env_sub_.connect("tcp://localhost:5560");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    mpc.initialization();
 }
 
 void MotionSystem::function() {
-    DM x0 = env_state.get_dm();
-    DM x_ref = mission_state.get_dm();
-    auto solution = NonlinearMPC::solve(x0, x_ref);
-    DM propeller = solution.first;
-    {
-        std::lock_guard<std::mutex> lk(mtx);
-        motion_state.set(propeller);
+    try {
+        DM x_ref;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            std::array<double, 12> x_current = env_state.get_array();
+            mission_state.get_dm(x_ref, x_current);
+        }
+        
+        // Check for valid inputs
+        if (x0.is_empty() || x_ref.is_empty()) {
+            throw std::runtime_error("Empty state received");
+        }
+        
+        auto solution = mpc.solve(x0, x_ref);
+        DM propeller = solution.first;
+        
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            motion_state.set(propeller);
+        }
+        // {
+        //     std::cout << "REAL Propeller values: ";
+        //     for (int i = 0; i < 8; ++i) {
+        //         std::cout << static_cast<double>(propeller(i)) << " ";
+        //     }
+        //     std::cout << std::endl;
+        // }
+    } catch (const std::exception& e) {
+        std::cerr << "MotionSystem error: " << e.what() << std::endl;
     }
 }
 

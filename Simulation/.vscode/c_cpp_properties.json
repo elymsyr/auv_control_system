@@ -3,7 +3,7 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**",
+                "${workspaceFolder}/Control/**",
                 "/home/eren/GitHub/Simulation",
                 "/home/eren/GitHub/Simulation/Control/include",
                 "/home/eren/GitHub/Simulation/Control/src",

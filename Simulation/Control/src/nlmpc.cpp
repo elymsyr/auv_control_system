@@ -7,9 +7,12 @@
 
 using namespace casadi;
 
-NonlinearMPC::NonlinearMPC(const VehicleModel& model, int N, double dt)
-    : model_(model), N_(N), dt_(dt), nx_(12), nu_(8), 
+NonlinearMPC::NonlinearMPC(const std::string& config_path, int N, double dt)
+    : model_(config_path), N_(N), dt_(dt), nx_(12), nu_(8), 
       prev_sol_(std::nullopt) {
+}
+
+void NonlinearMPC::initialization() {
     setup_optimization();
 }
 

@@ -40,42 +40,78 @@ struct EnvironmentTopic {
         memcpy(this->nu_dot, nu_dot.data(), sizeof(this->nu_dot));
     }
 
-    casadi::DM get_dm() {
-        casadi::DM merged(12, 1);
+    void get_dm(casadi::DM& merged) {
+        if (merged.is_empty() || merged.size1() != 12 || merged.size2() != 1) {
+            merged = casadi::DM::zeros(12, 1);
+        }
+
+        // Get writable pointer
         double* data = merged.ptr();
-        std::memcpy(data,       this->eta, 6 * sizeof(double));
-        std::memcpy(data + 6,   this->nu, 6 * sizeof(double));
-        return merged;
+        if (data) {
+            std::memcpy(data,     eta, 6 * sizeof(double));
+            std::memcpy(data + 6, nu,   6 * sizeof(double));
+        }
+    }
+
+    std::array<double, 12> get_array() {
+        std::array<double, 12> arr;
+        std::memcpy(arr.data(), eta, 6 * sizeof(double));
+        std::memcpy(arr.data() + 6, nu, 6 * sizeof(double));
+        return arr;
     }
 };
 
 // Mission System Topic
+#define HORIZON 41
+
 struct MissionTopic {
-    double eta_des[6];
-    double nu_des[6];
-    double nu_dot_des[6];
+    double eta_des[HORIZON][6] = {{0}};
+    double nu_des[HORIZON][6] = {{0}};
 
     static constexpr const char* TOPIC = "Mission";
 
     inline void set(const MissionTopic& o) {
-        std::memcpy(this, &o, sizeof(*this));
+        std::memcpy(eta_des, o.eta_des, sizeof(eta_des));
+        std::memcpy(nu_des, o.nu_des, sizeof(nu_des));
     }
 
-    void set(const std::array<double, 6>& eta_des = {0, 0, 0, 0, 0, 0}, 
-             const std::array<double, 6>& nu_des = {0, 0, 0, 0, 0, 0}, 
-             const std::array<double, 6>& nu_dot_des = {0, 0, 0, 0, 0, 0}, 
-             uint8_t msg_code = 0) {
-        memcpy(this->eta_des, eta_des.data(), sizeof(this->eta_des));
-        memcpy(this->nu_des, nu_des.data(), sizeof(this->nu_des));
-        memcpy(this->nu_dot_des, nu_dot_des.data(), sizeof(this->nu_dot_des));
+    void set(const std::array<double, 6>& eta = {0, 0, 0, 0, 0, 0},
+                                const std::array<double, 6>& nu = {0, 0, 0, 0, 0, 0}) {
+        for (int i = 0; i < HORIZON; i++) {
+            std::memcpy(eta_des[i], eta.data(), 6 * sizeof(double));
+            std::memcpy(nu_des[i], nu.data(), 6 * sizeof(double));
+        }
     }
 
-    void get_dm() {
-        casadi::DM merged(12, 1);
-        double* data = merged.ptr();
-        std::memcpy(data,       this->eta_des, 6 * sizeof(double));
-        std::memcpy(data + 6,   this->nu_des, 6 * sizeof(double));
-        return merged;
+    void set(const std::vector<std::array<double, 6>>& eta_points,
+                        const std::vector<std::array<double, 6>>& nu_points) {
+        if (eta_points.size() != nu_points.size()) {
+            throw std::invalid_argument("eta and nu vectors must be same size");
+        }
+        if (eta_points.size() > HORIZON) {
+            throw std::out_of_range("Too many trajectory points");
+        }
+        for (int i = 0; i < HORIZON; i++) {
+            std::memcpy(eta_des[i], eta_points[i].data(), 6 * sizeof(double));
+            std::memcpy(nu_des[i], nu_points[i].data(), 6 * sizeof(double));
+        }
+    }
+
+    void get_dm(casadi::DM& x_ref, const std::array<double, 12>& x_current) const {
+        x_ref = casadi::DM::zeros(12, HORIZON);
+        double* data = x_ref.ptr();
+
+        for (int i = 0; i < HORIZON; i++) {
+            // Process eta components (position/orientation)
+            for (int j = 0; j < 6; j++) {
+                data[i * 12 + j] = eta_des[i][j] - x_current[j];
+            }
+            
+            // Process nu components (velocity)
+            for (int j = 0; j < 6; j++) {
+                data[i * 12 + 6 + j] = nu_des[i][j] - x_current[j + 6];
+            }
+        }
     }
 };
 
@@ -121,20 +157,25 @@ struct CommandTopic {
 
 // Motion System Topic
 struct MotionTopic {
-    double propeller[6];
+    double propeller[8];
 
     static constexpr const char* TOPIC = "Motion";
 
+    void set(const casadi::DM& propeller_dm) {
+        if (propeller_dm.numel() != 8) {
+            throw std::runtime_error("Invalid propeller DM size");
+        }
+
+        const double* data = propeller_dm.ptr();
+        std::copy(data, data + 8, propeller);
+    }
+
+    void set(const std::array<double, 8>& propeller = {0, 0, 0, 0, 0, 0, 0, 0}) {
+        std::memcpy(this->propeller, propeller.data(), sizeof(this->propeller));
+    }
+
     inline void set(const MotionTopic& o) {
         std::memcpy(this, &o, sizeof(*this));
-    }
-
-    void set(const std::array<double, 6>& propeller = {0, 0, 0, 0, 0, 0}) {
-        memcpy(this->propeller, propeller.data(), sizeof(this->propeller));
-    }
-
-    void set(casadi::DM propeller) {
-        memcpy(this->propeller, static_cast<double>(propeller).data(), sizeof(this->propeller));
     }
 };
 

@@ -23,8 +23,7 @@ void ControlSystem::init_() {
     signal_state.set();
 }
 
-void ControlSystem::function() {
-}
+void ControlSystem::function() {}
 
 void ControlSystem::publish() {}
 

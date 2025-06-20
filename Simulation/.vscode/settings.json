@@ -85,5 +85,6 @@
         "__tree": "cpp",
         "queue": "cpp",
         "stack": "cpp"
-    }
+    },
+    "cmake.sourceDirectory": "/home/eren/GitHub/Simulation/Control"
 }
