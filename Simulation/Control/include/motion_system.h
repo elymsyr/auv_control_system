@@ -13,6 +13,9 @@
 #include <opencv4/opencv2/core.hpp>
 #include <vector>
 #include <stdexcept>
+#include <casadi/casadi.hpp>
+#include "nlmpc.h"
+#include "vehicle_model.h"
 
 class Model {
     cv::dnn::Net net;
@@ -59,7 +62,8 @@ public:
     MotionTopic motion_state;
     MissionTopic mission_state;
     EnvironmentTopic env_state;
-    // Model model;
+    NonlinearMPC mpc;
+    VehicleModel vehicle_model;
 
     MotionSystem(std::string name = "Motion", int runtime = 200, unsigned int system_code = 2);
     void init_() override;

@@ -4,7 +4,7 @@ using System.Text;
 using System.Threading;
 using UnityEngine;
 
-public class SonarTcpSubscriber : MonoBehaviour
+public class EnvironmentTcpSubscriber : MonoBehaviour
 {
     private string serverIp = "127.0.0.1";
     private int port = 7779;
@@ -59,22 +59,55 @@ public class SonarTcpSubscriber : MonoBehaviour
                     connectionAttempts = 0;
                     Debug.Log("Subscriber connected!");
 
-                    byte[] buffer = new byte[4096];
-                    StringBuilder dataBuffer = new StringBuilder();
+                    byte[] lengthBuffer = new byte[4];
+                    byte[] dataBuffer = null;
+                    int bytesRead = 0;
+                    int bytesToRead = 0;
 
                     while (running && client.Connected)
                     {
-                        int bytesRead = stream.Read(buffer, 0, buffer.Length);
-                        if (bytesRead == 0) // Graceful disconnect
+                        // Read 4-byte message length header
+                        bytesRead = 0;
+                        while (bytesRead < 4 && running)
                         {
-                            Thread.Sleep(100);
-                            continue;
+                            int read = stream.Read(
+                                lengthBuffer, 
+                                bytesRead, 
+                                4 - bytesRead
+                            );
+                            if (read == 0) break; // Disconnected
+                            bytesRead += read;
                         }
 
-                        string data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                        dataBuffer.Append(data);
+                        if (bytesRead < 4) continue; // Incomplete header
 
-                        ProcessDataBuffer(dataBuffer);
+                        // Get message length
+                        bytesToRead = BitConverter.ToInt32(lengthBuffer, 0);
+                        if (bytesToRead <= 0 || bytesToRead > 1024 * 1024) // Sanity check
+                        {
+                            Debug.LogError($"Invalid message length: {bytesToRead}");
+                            break;
+                        }
+
+                        // Read message data
+                        dataBuffer = new byte[bytesToRead];
+                        bytesRead = 0;
+                        while (bytesRead < bytesToRead && running)
+                        {
+                            int read = stream.Read(
+                                dataBuffer, 
+                                bytesRead, 
+                                bytesToRead - bytesRead
+                            );
+                            if (read == 0) break; // Disconnected
+                            bytesRead += read;
+                        }
+
+                        if (bytesRead < bytesToRead) continue; // Incomplete message
+
+                        // Process complete message
+                        string message = Encoding.UTF8.GetString(dataBuffer);
+                        ProcessMessage(message);
                     }
                 }
             }
@@ -103,32 +136,23 @@ public class SonarTcpSubscriber : MonoBehaviour
         }
     }
 
-    void ProcessDataBuffer(StringBuilder dataBuffer)
+    void ProcessMessage(string message)
     {
-        while (dataBuffer.Length > 0 && dataBuffer.ToString().Contains("\n"))
+        string[] parts = message.Split(',');
+        if (parts.Length != 6)
         {
-            int index = dataBuffer.ToString().IndexOf("\n");
-            string line = dataBuffer.ToString(0, index).Trim();
-            dataBuffer.Remove(0, index + 1);
+            Debug.LogWarning($"Invalid data format. Expected 6 values, got {parts.Length}");
+            return;
+        }
 
-            if (line.Length == 0) continue;
-
-            string[] parts = line.Split(',');
-            if (parts.Length != 6)
+        if (TryParseVector3(parts, 0, out Vector3 position) &&
+            TryParseVector3(parts, 3, out Vector3 rotation))
+        {
+            lock (dataLock)
             {
-                Debug.LogWarning($"Invalid data format. Expected 6 values, got {parts.Length}");
-                continue;
-            }
-
-            if (TryParseVector3(parts, 0, out Vector3 position) &&
-                TryParseVector3(parts, 3, out Vector3 rotation))
-            {
-                lock (dataLock)
-                {
-                    newPosition = position;
-                    newEulerAngles = rotation;
-                    newDataAvailable = true;
-                }
+                newPosition = position;
+                newEulerAngles = rotation;
+                newDataAvailable = true;
             }
         }
     }
@@ -139,7 +163,10 @@ public class SonarTcpSubscriber : MonoBehaviour
         for (int i = 0; i < 3; i++)
         {
             if (!float.TryParse(parts[startIndex + i], out float val))
+            {
+                Debug.LogWarning($"Failed to parse float: {parts[startIndex + i]}");
                 return false;
+            }
             result[i] = val;
         }
         return true;

@@ -4,6 +4,7 @@
 #pragma once
 #include <cstring>
 #include <zmq.hpp>
+#include <casadi/casadi.hpp>
 
 template<typename Topic>
 void Serialize(zmq::message_t& msg, const Topic& data) {  // Add data parameter
@@ -38,6 +39,14 @@ struct EnvironmentTopic {
         memcpy(this->nu, nu.data(), sizeof(this->nu));
         memcpy(this->nu_dot, nu_dot.data(), sizeof(this->nu_dot));
     }
+
+    casadi::DM get_dm() {
+        casadi::DM merged(12, 1);
+        double* data = merged.ptr();
+        std::memcpy(data,       this->eta, 6 * sizeof(double));
+        std::memcpy(data + 6,   this->nu, 6 * sizeof(double));
+        return merged;
+    }
 };
 
 // Mission System Topic
@@ -59,6 +68,14 @@ struct MissionTopic {
         memcpy(this->eta_des, eta_des.data(), sizeof(this->eta_des));
         memcpy(this->nu_des, nu_des.data(), sizeof(this->nu_des));
         memcpy(this->nu_dot_des, nu_dot_des.data(), sizeof(this->nu_dot_des));
+    }
+
+    void get_dm() {
+        casadi::DM merged(12, 1);
+        double* data = merged.ptr();
+        std::memcpy(data,       this->eta_des, 6 * sizeof(double));
+        std::memcpy(data + 6,   this->nu_des, 6 * sizeof(double));
+        return merged;
     }
 };
 
@@ -115,6 +132,10 @@ struct MotionTopic {
     void set(const std::array<double, 6>& propeller = {0, 0, 0, 0, 0, 0}) {
         memcpy(this->propeller, propeller.data(), sizeof(this->propeller));
     }
+
+    void set(casadi::DM propeller) {
+        memcpy(this->propeller, static_cast<double>(propeller).data(), sizeof(this->propeller));
+    }
 };
 
 // Signal System Topic
@@ -138,7 +159,7 @@ struct SignalTopic {
 
 struct TestSonarTopic {
     double detection[10];
-    double degree;
+    double degree[10];
     double timestamp = 0.0;
 
     static constexpr const char* TOPIC = "TestSonar";
@@ -148,10 +169,10 @@ struct TestSonarTopic {
     }
 
     void set(const std::array<double, 10>& detection = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
-              double degree = 0.0, 
+              const std::array<double, 10>& degree = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
               double timestamp = 0.0) {
         memcpy(this->detection, detection.data(), sizeof(this->detection));
-        this->degree = degree;
+        memcpy(this->degree, degree.data(), sizeof(this->degree));
         this->timestamp = timestamp;
     }
 };

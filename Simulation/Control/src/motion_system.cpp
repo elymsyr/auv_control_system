@@ -1,7 +1,10 @@
 #include "motion_system.h"
+#include <casadi/casadi.hpp>
+
+using namespace casadi;
 
 MotionSystem::MotionSystem(std::string name, int runtime, unsigned int system_code) 
-    : mission_sub_(mission_state, mission_mtx), env_sub_(env_state, env_mtx), Subsystem(name, runtime, system_code) 
+    : vehicle_model("/home/eren/GitHub/ControlSystem/Simulation/Control/config.json"), mpc(vehicle_model), mission_sub_(mission_state, mission_mtx), env_sub_(env_state, env_mtx), Subsystem(name, runtime, system_code) 
 {
     for (int i = 0; i < 20 && !motion_pub_.is_bound() ; i++) {
         motion_pub_.bind("tcp://localhost:5563");
@@ -23,12 +26,14 @@ void MotionSystem::init_() {
 }
 
 void MotionSystem::function() {
-    // // notify if any error occured
-    // std::array<double, 6> propeller = {static_cast<double>(rand() % 10), static_cast<double>(rand() % 10), static_cast<double>(rand() % 10), static_cast<double>(rand() % 10), static_cast<double>(rand() % 8), static_cast<double>(rand() % 8)};
-    // MotionTopic test;
-    // test.set(propeller);
-    // std::lock_guard lk(mtx);
-    // motion_state.set(test);
+    DM x0 = env_state.get_dm();
+    DM x_ref = mission_state.get_dm();
+    auto solution = NonlinearMPC::solve(x0, x_ref);
+    DM propeller = solution.first;
+    {
+        std::lock_guard<std::mutex> lk(mtx);
+        motion_state.set(propeller);
+    }
 }
 
 void MotionSystem::publish() {

@@ -31,10 +31,14 @@ void MissionSystem::init_() {
 }
 
 void MissionSystem::function() {
-    std::lock_guard lk(mtx);
-    signal_state.set();
-    mission_state.set();
-    testsonar_state.set();
+    double* degree = testsonar_state.degree;
+    double* detections = testsonar_state.detection;
+    
+    {
+        std::lock_guard lk(mtx);
+
+    }
+    
 }
 
 void MissionSystem::publish() {

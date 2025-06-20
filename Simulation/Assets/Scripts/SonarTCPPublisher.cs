@@ -6,14 +6,15 @@ using UnityEngine;
 
 public class SonarTcpPublisher : MonoBehaviour
 {
-    public string serverIp = "127.0.0.1";
-    public int serverPort = 7780;
+    private string serverIp = "127.0.0.1";
+    private int serverPort = 7780;
     private SonarRayCast sonarRayCast;
     private TcpClient client;
     private NetworkStream stream;
     private Thread clientThread;
     private bool running = false;
     private int connectionAttempts = 0;
+    private readonly object sendLock = new object();
 
     void Start()
     {
@@ -43,7 +44,7 @@ public class SonarTcpPublisher : MonoBehaviour
                     {
                         SendData(sonarRayCast.Hits);
                     }
-                    Thread.Sleep(50);
+                    Thread.Sleep(50); // 20Hz update rate
                 }
             }
             catch (SocketException) when (!running)
@@ -74,16 +75,31 @@ public class SonarTcpPublisher : MonoBehaviour
     {
         try
         {
+            // Build data string
             var sb = new StringBuilder();
             for (int i = 0; i < hits.Length; i++)
             {
                 sb.Append(hits[i].ToString("F4"));
                 if (i < hits.Length - 1) sb.Append(',');
             }
-            sb.Append('\n');
 
-            byte[] data = Encoding.UTF8.GetBytes(sb.ToString());
-            stream.Write(data, 0, data.Length);
+            // Convert to bytes
+            byte[] dataBytes = Encoding.UTF8.GetBytes(sb.ToString());
+            
+            // Create header with message length (big-endian)
+            byte[] lengthHeader = new byte[4];
+            int length = dataBytes.Length;
+            lengthHeader[0] = (byte)(length >> 24);
+            lengthHeader[1] = (byte)(length >> 16);
+            lengthHeader[2] = (byte)(length >> 8);
+            lengthHeader[3] = (byte)length;
+            
+            // Send with lock to prevent interleaving
+            lock (sendLock)
+            {
+                stream.Write(lengthHeader, 0, 4);
+                stream.Write(dataBytes, 0, dataBytes.Length);
+            }
         }
         catch (Exception e)
         {

@@ -30,30 +30,30 @@ void EnvironmentSystem::init_() {
 }
 
 void EnvironmentSystem::function() {
-    {
-        std::lock_guard<std::mutex> motion_lock(motion_mtx);
-        std::cout << "Propeller values: ";
-        for (int i = 0; i < 6; ++i) {
-            std::cout << motion_state.propeller[i] << " ";
-        }
-        std::cout << std::endl;
-    }
-    {
-        std::lock_guard<std::mutex> env_lock(mtx);
-        std::cout << "Environment eta: ";
-        for (int i = 0; i < 6; ++i) {
-            std::cout << env_state.eta[i] << " ";
-        }
-        std::cout << "\nEnvironment nu: ";
-        for (int i = 0; i < 6; ++i) {
-            std::cout << env_state.nu[i] << " ";
-        }
-        std::cout << "\nEnvironment nu_dot: ";
-        for (int i = 0; i < 6; ++i) {
-            std::cout << env_state.nu_dot[i] << " ";
-        }
-        std::cout << std::endl;
-    }
+    // {
+    //     std::lock_guard<std::mutex> motion_lock(motion_mtx);
+    //     std::cout << "Propeller values: ";
+    //     for (int i = 0; i < 6; ++i) {
+    //         std::cout << motion_state.propeller[i] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // {
+    //     std::lock_guard<std::mutex> env_lock(mtx);
+    //     std::cout << "Environment eta: ";
+    //     for (int i = 0; i < 6; ++i) {
+    //         std::cout << env_state.eta[i] << " ";
+    //     }
+    //     std::cout << "\nEnvironment nu: ";
+    //     for (int i = 0; i < 6; ++i) {
+    //         std::cout << env_state.nu[i] << " ";
+    //     }
+    //     std::cout << "\nEnvironment nu_dot: ";
+    //     for (int i = 0; i < 6; ++i) {
+    //         std::cout << env_state.nu_dot[i] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
     std::lock_guard lk(mtx);
 
     // Copy propeller values safely
