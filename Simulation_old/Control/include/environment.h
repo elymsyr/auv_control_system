@@ -86,7 +86,7 @@ public:
     float circle_radius_ = 10.0f;
     int number_obs_to_feed_ = 50;
     int max_iter_ = 1000;
-    int obstacle_radius_ = 12;
+    int obstacle_radius_ = 7;
 
 private:
     float round_;

@@ -96,6 +96,8 @@ class EnvironmentSubscriber(threading.Thread):
                 
             logging.debug(f"Updated environment: pos=({pos_x:.2f}, {pos_y:.2f}, {pos_z:.2f}) "
                           f"rot=({roll_deg:.2f}, {pitch_deg:.2f}, {yaw_deg:.2f})")
+            print(f"Updated environment: pos=({pos_x:.2f}, {pos_y:.2f}, {pos_z:.2f}) "
+                          f"rot=({roll_deg:.2f}, {pitch_deg:.2f}, {yaw_deg:.2f})")
         except Exception as e:
             logging.error(f"Environment data processing error: {str(e)}")
 
@@ -256,7 +258,6 @@ class UnitySonarServer(threading.Thread):
                 if msg_length > 1024 * 1024:  # 1MB sanity check
                     logging.error(f"Invalid sonar message length: {msg_length}")
                     break
-                
                 # Read message data
                 data_bytes = b''
                 while len(data_bytes) < msg_length:
@@ -314,8 +315,8 @@ def main():
     # Create components
     env_sub = EnvironmentSubscriber(ZMQ_ENV_ENDPOINT)
     sonar_pub = TestSonarPublisher(ZMQ_SONAR_ENDPOINT)
-    unity_env_server = UnityEnvironmentServer(port=UNITY_ENV_PORT)
-    unity_sonar_server = UnitySonarServer(port=UNITY_SONAR_PORT)
+    unity_env_server = UnityEnvironmentServer(host="192.168.212.107", port=UNITY_ENV_PORT)
+    unity_sonar_server = UnitySonarServer(host="192.168.212.107", port=UNITY_SONAR_PORT)
     
     # Start components
     env_sub.start()

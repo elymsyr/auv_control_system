@@ -12,6 +12,7 @@
 // python /home/eren/GitHub/Simulation/Model/visualize.py
 // rm -f *.o *.so jit_* libdynamics_func*
 
+
 // nvcc -arch=sm_75 -dc -I"${CONDA_PREFIX}/include" data_generation.cpp -o data_generation.o
 // g++ -o data_generation environment_helper.o environment_map.o environment_astar.o environment_global.o data_generation.o vehicle_model.o nlmpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lglfw -lGL -lcasadi -lipopt -lzmq -lcudart -lhdf5 -lhdf5_cpp -lz -ldl -lm -L/usr/local/cuda/lib64
 // ./data_generation
@@ -28,27 +29,19 @@
 #include <csignal>
 #include <atomic>
 #include <sys/stat.h>
-#include <GLFW/glfw3.h>
-#include <cmath>
-#include <thread>
-#include <mutex>
-#include <algorithm>
 
 using namespace casadi;
 using namespace H5;
 
 // Constants
-const bool VISUALIZE = true;
-const int VIS_WIDTH = 800;
-const int VIS_HEIGHT = 800;
 const int WIDTH = 129;
 const int HEIGHT = 129;
-const int N = 40;
-const int MAX_OBSTACLES = 10;
-const int MIN_OBSTACLES = 2;
+const int N = 40;  // MPC horizon
+const int MAX_OBSTACLES = 20;
+const int MIN_OBSTACLES = 5;
 const float OBSTACLE_THRESHOLD = 250.0f;
 const float COLLISION_THRESHOLD = 0.5f;
-const int MAX_STEPS_PER_SCENARIO = 100;
+const int MAX_STEPS_PER_SCENARIO = 200;
 const int MAX_SCENARIOS = 1;
 const int CHUNK_SIZE = 100;
 const std::string HDF_PATH = "astar_mpc_data.h5";
@@ -73,18 +66,6 @@ const hsize_t U_CHUNK[2] = {100, 8};
 
 // Data buffers
 std::vector<double> x_current_buf, x_ref_buf, u_opt_buf, x_next_buf;
-
-struct VisualizationData {
-    std::vector<float2> obstacles;
-    std::vector<float2> path_points;
-    float2 vehicle_pos = {0.0f, 0.0f};
-    float vehicle_yaw = 0.0f;
-    float2 goal_pos = {0.0f, 0.0f};
-};
-
-VisualizationData vis_data;
-std::mutex vis_mutex;
-GLFWwindow* window = nullptr;
 
 // Signal handler
 void sigint_handler(int) {
@@ -112,17 +93,17 @@ double rand_near(double abs_max) {
 DM generate_X_current() {
     DM eta = DM::vertcat({
         0, 0, 0,
-        rand_near(0.05),
-        rand_near(0.05),
+        rand_near(M_PI/10),
+        rand_near(M_PI/10),
         rand_near(M_PI)
     });
 
     DM nu = DM::vertcat({
+        rand_near(2.0),
+        rand_near(2.0),
         rand_near(1.0),
-        rand_near(1.0),
-        rand_near(0.5),
-        rand_near(0.01),
-        rand_near(0.01),
+        rand_near(0.001),
+        rand_near(0.001),
         rand_near(0.1)
     });
 
@@ -303,192 +284,6 @@ void initialize_hdf5() {
     }
 }
 
-// Visualization functions
-void draw_vehicle(float x, float y, float yaw) {
-    glPushMatrix();
-    glTranslatef(x, y, 0.0f);
-    glRotatef(yaw * 180.0f / M_PI, 0.0f, 0.0f, 1.0f);
-    
-    // Draw vehicle body
-    glColor3f(0.0f, 1.0f, 0.0f); // Green
-    glBegin(GL_TRIANGLES);
-    glVertex2f(0.5f, 0.0f);
-    glVertex2f(-0.3f, 0.3f);
-    glVertex2f(-0.3f, -0.3f);
-    glEnd();
-    
-    // Draw heading indicator
-    glColor3f(1.0f, 1.0f, 0.0f); // Yellow
-    glBegin(GL_LINES);
-    glVertex2f(0.0f, 0.0f);
-    glVertex2f(0.5f, 0.0f);
-    glEnd();
-    
-    glPopMatrix();
-}
-
-void draw_path(const std::vector<float2>& points) {
-    if (points.empty()) return;
-    
-    glColor3f(0.0f, 0.0f, 1.0f); // Blue
-    glLineWidth(2.0f);
-    glBegin(GL_LINE_STRIP);
-    for (const auto& pt : points) {
-        glVertex2f(pt.x, pt.y);
-    }
-    glEnd();
-}
-
-void draw_goal(float x, float y) {
-    glColor3f(1.0f, 0.0f, 1.0f); // Magenta
-    glPointSize(10.0f);
-    glBegin(GL_POINTS);
-    glVertex2f(x, y);
-    glEnd();
-}
-
-void draw_obstacles(const std::vector<float2>& obstacles) {
-    if (obstacles.empty()) return;
-    
-    const float RADIUS = 4.0f;
-    const int SEGMENTS = 36;
-    
-    glColor3f(1.0f, 0.0f, 0.0f);
-    glLineWidth(0.5f);
-    
-    for (const auto& obs : obstacles) {
-        glBegin(GL_LINE_LOOP);
-        for (int i = 0; i < SEGMENTS; i++) {
-            float theta = 2.0f * M_PI * float(i) / float(SEGMENTS);
-            float dx = RADIUS * cosf(theta);
-            float dy = RADIUS * sinf(theta);
-            glVertex2f(obs.x + dx, obs.y + dy);
-        }
-        glEnd();
-    }
-    
-    // Optional: Draw center points (keep if you want visible markers)
-    glPointSize(3.0f);
-    glBegin(GL_POINTS);
-    for (const auto& obs : obstacles) {
-        glVertex2f(obs.x, obs.y);
-    }
-    glEnd();
-}
-
-void render_visualization() {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    
-    // Lock mutex to safely access visualization data
-    std::lock_guard<std::mutex> lock(vis_mutex);
-    
-    // Set up coordinate system
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    float view_size = 25.0f;
-    glOrtho(-view_size, view_size, -view_size, view_size, -1.0f, 1.0f);
-    
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    
-    // Draw coordinate grid
-    glColor3f(0.3f, 0.3f, 0.3f); // Dark gray
-    glLineWidth(1.0f);
-    glBegin(GL_LINES);
-    for (float i = -25.0f; i <= 25.0f; i += 5.0f) {
-        // Vertical lines
-        glVertex2f(i, -25.0f);
-        glVertex2f(i, 25.0f);
-        
-        // Horizontal lines
-        glVertex2f(-25.0f, i);
-        glVertex2f(25.0f, i);
-    }
-    glEnd();
-    
-    // Draw elements
-    draw_obstacles(vis_data.obstacles);
-    draw_path(vis_data.path_points);
-    draw_goal(vis_data.goal_pos.x, vis_data.goal_pos.y);
-    draw_vehicle(vis_data.vehicle_pos.x, vis_data.vehicle_pos.y, vis_data.vehicle_yaw);
-    
-    glfwSwapBuffers(window);
-}
-
-void visualization_thread_func() {
-    if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW\n";
-        return;
-    }
-    
-    window = glfwCreateWindow(VIS_WIDTH, VIS_HEIGHT, "MPC-A* Path Planning", NULL, NULL);
-    if (!window) {
-        glfwTerminate();
-        std::cerr << "Failed to create GLFW window\n";
-        return;
-    }
-    
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(1); // Enable vsync
-    
-    // Set up OpenGL
-    glClearColor(0.1f, 0.1f, 0.1f, 1.0f); // Dark background
-    glEnable(GL_POINT_SMOOTH);
-    glEnable(GL_LINE_SMOOTH);
-    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
-    glHint(GL_POINT_SMOOTH_HINT, GL_NICEST);
-    
-    // Main visualization loop
-    while (!shutdown_requested && !glfwWindowShouldClose(window)) {
-        render_visualization();
-        glfwPollEvents();
-    }
-    
-    glfwDestroyWindow(window);
-    glfwTerminate();
-    window = nullptr;
-}
-
-float2 int2_to_float2(int2 pt, const EnvironmentMap& map) {
-    float2 world;
-    // Calculate world position considering map sliding
-    world.x = map.world_position_.x + (pt.x - map.shift_total_.x) * map.r_m_;
-    world.y = map.world_position_.y + (pt.y - map.shift_total_.y) * map.r_m_;
-    return world;
-}
-
-void update_visualization_data(const std::vector<float2>& new_obstacles, const EnvironmentMap& map, const DM& x0, const std::vector<float2>& ref_traj, const float2& goal_pos) {
-    std::lock_guard<std::mutex> lock(vis_mutex);
-    
-    // Update obstacles (only add new ones)
-    for (const auto& obs : new_obstacles) {
-        // Check if obstacle already exists
-        bool exists = false;
-        for (const auto& existing : vis_data.obstacles) {
-            if (fabs(existing.x - obs.x) < 0.1f && fabs(existing.y - obs.y) < 0.1f) {
-                exists = true;
-                break;
-            }
-        }
-        if (!exists) {
-            vis_data.obstacles.push_back(obs);
-        }
-    }
-    
-    // Update vehicle position
-    vis_data.vehicle_pos.x = static_cast<double>(x0(0));
-    vis_data.vehicle_pos.y = static_cast<double>(x0(1));
-    vis_data.vehicle_yaw = static_cast<double>(x0(5));
-    
-    // Update goal position
-    vis_data.goal_pos = goal_pos;
-    
-    // Convert path to world coordinates with sliding correction
-    vis_data.path_points.clear();
-    vis_data.path_points = ref_traj;
-}
-
-
 int main() {
     std::signal(SIGINT, sigint_handler);
     try {
@@ -496,58 +291,46 @@ int main() {
         VehicleModel model("config.json");
         NonlinearMPC mpc("config.json", N);
         mpc.initialization();
-        std::thread visualization_thread(visualization_thread_func);
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
         for (int scenario = 0; scenario < MAX_SCENARIOS && !shutdown_requested; ++scenario) {
             // Create environment with random obstacles
             EnvironmentMap map(WIDTH, HEIGHT);
             int num_obstacles = MIN_OBSTACLES + rand() % (MAX_OBSTACLES - MIN_OBSTACLES);
-            
-            std::vector<float2> scenario_obstacles;
 
-            float ref_x = rand_uniform(-15.0f, 15.0f);
-            float ref_y = rand_uniform(-15.0f, 15.0f);
-            float2 goal_pos = {ref_x, ref_y};
+            float ref_x = rand_uniform(-14.0f, 14.0f);
+            float ref_y = rand_uniform(-14.0f, 14.0f);
 
             for (int i = 0; i < num_obstacles; ) {
-                float x = rand_uniform(-15.0f, 15.0f);
-                float y = rand_uniform(-15.0f, 15.0f);
+                float x = rand_uniform(-14.0f, 14.0f);
+                float y = rand_uniform(-14.0f, 14.0f);
                 
                 // Skip if near start/goal
-                if (hypot(x, y) < 4.3f || 
-                    hypot(x - ref_x, y - ref_y) < 4.3f) {
+                if (hypot(x, y) < 7.2f || 
+                    hypot(x - ref_x, y - ref_y) < 7.2f) {
                     continue;
                 }
                 map.updateSinglePoint(x, y, 255.0f);
-                scenario_obstacles.push_back({x, y});
                 i++;
             }
 
             DM x0 = generate_X_current();
             DM x_ref = DM::repmat(DM::vertcat({ref_x, ref_y, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, N+1);
             map.set_ref(ref_x, ref_y);
-            if (VISUALIZE) map.updateSinglePoint(ref_x, ref_y, 240.0f);
+            map.updateSinglePoint(ref_x, ref_y, 200.0f);
             double nu1 = static_cast<double>(x0(6));
             double nu2 = static_cast<double>(x0(7));
             map.set_velocity(nu1, nu2);
 
             std::cout << "Starting Velocity: " << nu1 << ", " << nu2 << "\n"; 
             
-            update_visualization_data(scenario_obstacles, map, x0, std::vector<float2>{}, goal_pos);
-
-            mpc.reset_previous_solution();
-
             for (int step = 0; step < MAX_STEPS_PER_SCENARIO && !shutdown_requested; ++step) {
-                std::vector<float2> traj;
                 double eta1 = static_cast<double>(x0(0));
                 double eta2 = static_cast<double>(x0(1));
                 double eta6 = static_cast<double>(x0(5));
 
                 // Update map with current position
-                if (VISUALIZE) map.updateSinglePoint(eta1, eta2, 140.0f);
+                map.updateSinglePoint(eta1, eta2, 130.0f);
                 map.slide(eta1, eta2);
-                map.set_ref(ref_x, ref_y);
 
                 // Generate path with A*
                 Path path = map.findPath();
@@ -558,7 +341,7 @@ int main() {
 
                 // Create reference trajectory
                 int m = std::min(path.length, N+1);
-                float spacing = static_cast<float>(std::min((m-1) / N, 6));
+                float spacing = static_cast<float>(std::min((m-1) / N, 4));
                 std::vector<float2> path_points;
                 
                 for (int k = 0; k < m; k++) {
@@ -609,11 +392,8 @@ int main() {
                     x_ref(0, k) = world_coor.x;
                     x_ref(1, k) = world_coor.y;
                     x_ref(5, k) = angle;
-                    traj.push_back(make_float2(world_coor.x, world_coor.y));
-                    if (VISUALIZE && (step <=  1 || step % 40 == 0)) map.updateSinglePoint(world_coor.x, world_coor.y, 80.0f);
+                    if (step == 1) map.updateSinglePoint(world_coor.x, world_coor.y, 49.0f);
                 }
-                
-                update_visualization_data(scenario_obstacles, map, x0, traj, goal_pos);
 
                 // Solve MPC
                 auto [u_opt, x_opt] = mpc.solve(x0, x_ref);
@@ -632,7 +412,13 @@ int main() {
                     std::cerr << "Invalid MPC solution\n";
                     break;
                 }
+
+                std::cout << "\nStep " << step << ":\n  World Positions: " << map.world_position_.x << ", " << map.world_position_.y << "\n"
+                            << "  Reference: " << map.ref_.x << ", " << map.ref_.y << "\n"
+                            << "  State: " << x0 << "\n";
                 
+                if (step >= MAX_STEPS_PER_SCENARIO-1 || step%55 == 0 || step == 2) map.save(std::to_string(step));
+
                 // Store data
                 auto x0_vec = dm_to_vector(x0);
                 auto x_ref_vec = dm_to_vector(x_ref);
@@ -649,34 +435,14 @@ int main() {
                 }
 
                 x0 = x_next;
-                auto state_error = x_ref(Slice(), 0) - x0;
 
-                std::cout << "Step " << step << "\n"
-                            << "  Controls: " << u_opt << "\n"
-                            << "  State: " << x0 << "\n"
-                            << "  Reference: " << x_ref(Slice(), 0) << "\n"
-                            << "  Path Lenth: " << path.length << "\n"
-                            << "  State Error: " << state_error << "\n";
-                if (VISUALIZE && (step >= MAX_STEPS_PER_SCENARIO-1 || step % 40 == 0 || step <= 1)) map.save(std::to_string(step));
-
-                // double dist_to_goal = sqrt(pow(static_cast<double>(x0(0)) - ref_x, 2) + 
-                //                      pow(static_cast<double>(x0(1)) - ref_y, 2));
-                // if (dist_to_goal < COLLISION_THRESHOLD) {
-                //     std::cout << "\nGoal reached!\n";
-                // }
-
-                // Free path resources
-                if (path.points) {
-                    free(path.points);
+                double dist_to_goal = sqrt(pow(static_cast<double>(x0(0)) - ref_x, 2) + 
+                                     pow(static_cast<double>(x0(1)) - ref_y, 2));
+                if (dist_to_goal < COLLISION_THRESHOLD) {
+                    std::cout << "\nGoal reached!\n";
                 }
-                // Clear obstacles for next scenario
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
-            {
-                std::lock_guard<std::mutex> lock(vis_mutex);
-                vis_data.obstacles.clear();
-            }            
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            
             std::cout << "\nCompleted scenario " << scenario << "/" << MAX_SCENARIOS << "\n";
         }
         

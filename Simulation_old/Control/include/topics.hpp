@@ -97,11 +97,9 @@ struct MissionTopic {
         }
     }
 
-    void get_dm(casadi::DM& merged) const { // , const std::array<double, 12>& x_current
-        if (merged.is_empty() || merged.size1() != 12 || merged.size2() != HORIZON) {
-            merged = casadi::DM::zeros(12, HORIZON);
-        }
-        double* data = merged.ptr();
+    void get_dm(casadi::DM& x_ref) const { // , const std::array<double, 12>& x_current
+        x_ref = casadi::DM::zeros(12, HORIZON);
+        double* data = x_ref.ptr();
 
         for (int i = 0; i < HORIZON; i++) {
             // Process eta components (position/orientation)

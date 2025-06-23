@@ -8,8 +8,7 @@ MotionSystem::MotionSystem(std::string name, int runtime, unsigned int system_co
       mpc("/home/eren/GitHub/Simulation/config.json", 40, 0.1),
       mission_sub_(mission_state, mission_mtx),
       env_sub_(env_state, env_mtx),
-      x0(DM::vertcat({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})),
-      x_ref(DM::zeros(12, 41))
+      x0(DM::vertcat({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 {
     for (int i = 0; i < 20 && !motion_pub_.is_bound() ; i++) {
         motion_pub_.bind("tcp://localhost:5563");
@@ -33,6 +32,7 @@ void MotionSystem::init_() {
 
 void MotionSystem::function() {
     try {
+        DM x_ref;
         {
             std::lock_guard<std::mutex> lk(mtx);
             // std::array<double, 12> x_current = env_state.get_array();

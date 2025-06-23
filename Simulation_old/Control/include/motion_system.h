@@ -75,8 +75,6 @@ protected:
 
 private:
     casadi::DM x0;
-    casadi::DM x_ref;
-
 };
 
 #endif // MOTION_H

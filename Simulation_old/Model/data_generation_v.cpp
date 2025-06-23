@@ -1,21 +1,19 @@
 // cd /home/eren/GitHub/Simulation/Model
-// rm -f *.o *.so jit_* libdynamics_func* *.bin
+// rm -f *.o jit_* data_generation_v
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c environment_helper.cpp -o environment_helper.o
 // nvcc -arch=sm_75 -c environment_map.cu -o environment_map.o
 // nvcc -arch=sm_75 -c environment_astar.cu -o environment_astar.o
 // nvcc -arch=sm_75 -c environment_global.cu -o environment_global.o
-// nvcc -arch=sm_75 -dc -I"${CONDA_PREFIX}/include" data_generation.cpp -o data_generation.o
+// nvcc -arch=sm_75 -dc -I"${CONDA_PREFIX}/include" data_generation_v.cpp -o data_generation_v.o
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c nlmpc.cpp -o nlmpc.o
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c vehicle_model.cpp -o vehicle_model.o
-// g++ -o data_generation environment_helper.o environment_map.o environment_astar.o environment_global.o data_generation.o vehicle_model.o nlmpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lglfw -lGL -lcasadi -lipopt -lzmq -lcudart -lhdf5 -lhdf5_cpp -lz -ldl -lm -L/usr/local/cuda/lib64
-// ./data_generation
-// python /home/eren/GitHub/Simulation/Model/visualize.py
-// rm -f *.o *.so jit_* libdynamics_func*
+// g++ -o data_generation_v environment_helper.o environment_map.o environment_astar.o environment_global.o data_generation_v.o vehicle_model.o nlmpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lglfw -lGL -lcasadi -lipopt -lzmq -lcudart -lhdf5 -lhdf5_cpp -lz -ldl -lm -L/usr/local/cuda/lib64
+// ./data_generation_v
 
-// nvcc -arch=sm_75 -dc -I"${CONDA_PREFIX}/include" data_generation.cpp -o data_generation.o
-// g++ -o data_generation environment_helper.o environment_map.o environment_astar.o environment_global.o data_generation.o vehicle_model.o nlmpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lglfw -lGL -lcasadi -lipopt -lzmq -lcudart -lhdf5 -lhdf5_cpp -lz -ldl -lm -L/usr/local/cuda/lib64
-// ./data_generation
-// python /home/eren/GitHub/Simulation/Model/visualize.py
+
+// nvcc -arch=sm_75 -dc -I"${CONDA_PREFIX}/include" data_generation_v.cpp -o data_generation_v.o
+// g++ -o data_generation_v environment_helper.o environment_map.o environment_astar.o environment_global.o data_generation_v.o vehicle_model.o nlmpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lglfw -lGL -lcasadi -lipopt -lzmq -lcudart -lhdf5 -lhdf5_cpp -lz -ldl -lm -L/usr/local/cuda/lib64
+// ./data_generation_v
 
 #include "environment.h"
 #include <H5Cpp.h>
@@ -38,20 +36,21 @@ using namespace casadi;
 using namespace H5;
 
 // Constants
-const bool VISUALIZE = true;
-const int VIS_WIDTH = 800;
-const int VIS_HEIGHT = 800;
 const int WIDTH = 129;
 const int HEIGHT = 129;
-const int N = 40;
-const int MAX_OBSTACLES = 10;
-const int MIN_OBSTACLES = 2;
+const int N = 20;  // MPC horizon
+const int MAX_OBSTACLES = 50;
+const int MIN_OBSTACLES = 10;
 const float OBSTACLE_THRESHOLD = 250.0f;
 const float COLLISION_THRESHOLD = 0.5f;
-const int MAX_STEPS_PER_SCENARIO = 100;
-const int MAX_SCENARIOS = 1;
+const int MAX_STEPS_PER_SCENARIO = 40;
+const int MAX_SCENARIOS = 10000;
 const int CHUNK_SIZE = 100;
 const std::string HDF_PATH = "astar_mpc_data.h5";
+
+// Visualization constants
+const int VIS_WIDTH = 800;
+const int VIS_HEIGHT = 800;
 
 // Global state
 std::atomic<bool> shutdown_requested(false);
@@ -74,6 +73,7 @@ const hsize_t U_CHUNK[2] = {100, 8};
 // Data buffers
 std::vector<double> x_current_buf, x_ref_buf, u_opt_buf, x_next_buf;
 
+// Visualization data
 struct VisualizationData {
     std::vector<float2> obstacles;
     std::vector<float2> path_points;
@@ -90,6 +90,7 @@ GLFWwindow* window = nullptr;
 void sigint_handler(int) {
     std::cout << "\nShutdown requested, finishing current work...\n";
     shutdown_requested = true;
+    if (window) glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 
 // Helper functions
@@ -111,19 +112,21 @@ double rand_near(double abs_max) {
 
 DM generate_X_current() {
     DM eta = DM::vertcat({
-        0, 0, 0,
-        rand_near(0.05),
-        rand_near(0.05),
-        rand_near(M_PI)
+        rand_uniform(-5.0, 5.0),
+        rand_uniform(-5.0, 5.0),
+        rand_uniform_step(2.0, 25.0, false),
+        rand_near(M_PI/4),
+        rand_near(M_PI/4),
+        rand_uniform(-M_PI, M_PI)
     });
 
     DM nu = DM::vertcat({
-        rand_near(1.0),
-        rand_near(1.0),
-        rand_near(0.5),
-        rand_near(0.01),
-        rand_near(0.01),
-        rand_near(0.1)
+        rand_uniform(0.0, 5.0),
+        rand_uniform(0.0, 5.0),
+        rand_uniform(0.0, 5.0),
+        rand_near(0.05),
+        rand_near(0.05),
+        rand_uniform(-0.1, 0.1)
     });
 
     return DM::vertcat({eta, nu});
@@ -141,10 +144,6 @@ std::vector<double> dm_to_vector(const DM& m) {
 
 // HDF5 Management
 void write_chunk() {
-    if (!ds_xcurr || !ds_xref || !ds_uopt || !ds_xnext) {
-        std::cerr << "Dataset pointers are invalid!" << std::endl;
-        return;
-    }
     if (x_current_buf.empty()) return;
 
     const hsize_t n_new = x_current_buf.size() / 12;
@@ -166,29 +165,28 @@ void write_chunk() {
     hsize_t count[2] = {n_new, 12};
     DataSpace mem_space(2, count);
     
-    // Get updated file space after extension
-    DataSpace file_space_xcurr = ds_xcurr->getSpace();
-    file_space_xcurr.selectHyperslab(H5S_SELECT_SET, count, offset);
-    ds_xcurr->write(x_current_buf.data(), PredType::NATIVE_DOUBLE, mem_space, file_space_xcurr);
+    DataSpace file_space = ds_xcurr->getSpace();
+    file_space.selectHyperslab(H5S_SELECT_SET, count, offset);
+    ds_xcurr->write(x_current_buf.data(), PredType::NATIVE_DOUBLE, mem_space, file_space);
 
     // Write x_ref
     hsize_t ref_count[2] = {n_new, 12*(N+1)};
     DataSpace ref_mem_space(2, ref_count);
-    DataSpace file_space_xref = ds_xref->getSpace();
-    file_space_xref.selectHyperslab(H5S_SELECT_SET, ref_count, offset);
-    ds_xref->write(x_ref_buf.data(), PredType::NATIVE_DOUBLE, ref_mem_space, file_space_xref);
+    file_space = ds_xref->getSpace();
+    file_space.selectHyperslab(H5S_SELECT_SET, ref_count, offset);
+    ds_xref->write(x_ref_buf.data(), PredType::NATIVE_DOUBLE, ref_mem_space, file_space);
 
     // Write u_opt
     hsize_t u_count[2] = {n_new, 8};
     DataSpace u_mem_space(2, u_count);
-    DataSpace file_space_uopt = ds_uopt->getSpace();
-    file_space_uopt.selectHyperslab(H5S_SELECT_SET, u_count, offset);
-    ds_uopt->write(u_opt_buf.data(), PredType::NATIVE_DOUBLE, u_mem_space, file_space_uopt);
+    file_space = ds_uopt->getSpace();
+    file_space.selectHyperslab(H5S_SELECT_SET, u_count, offset);
+    ds_uopt->write(u_opt_buf.data(), PredType::NATIVE_DOUBLE, u_mem_space, file_space);
 
     // Write x_next
-    DataSpace file_space_xnext = ds_xnext->getSpace();
-    file_space_xnext.selectHyperslab(H5S_SELECT_SET, count, offset);
-    ds_xnext->write(x_next_buf.data(), PredType::NATIVE_DOUBLE, mem_space, file_space_xnext);
+    file_space = ds_xnext->getSpace();
+    file_space.selectHyperslab(H5S_SELECT_SET, count, offset);
+    ds_xnext->write(x_next_buf.data(), PredType::NATIVE_DOUBLE, mem_space, file_space);
 
     // Clear buffers
     x_current_buf.clear();
@@ -198,26 +196,17 @@ void write_chunk() {
 }
 
 void cleanup_hdf5() {
-    try {
-        // Write any remaining data first
-        if (!x_current_buf.empty()) {
-            write_chunk();
-        }
-        
-        // Explicitly flush before closing
-        if (file) {
-            H5Fflush(file->getId(), H5F_SCOPE_GLOBAL);
-        }
-
-        // Then delete resources
-        if (ds_xnext) { delete ds_xnext; ds_xnext = nullptr; }
-        if (ds_uopt)  { delete ds_uopt;  ds_uopt  = nullptr; }
-        if (ds_xref)  { delete ds_xref;  ds_xref  = nullptr; }
-        if (ds_xcurr) { delete ds_xcurr; ds_xcurr = nullptr; }
-        if (file)     { delete file;     file     = nullptr; }
-        
-    } catch (...) {
-        std::cerr << "Error during final cleanup\n";
+    if (!x_current_buf.empty()) {
+        write_chunk();
+    }
+    
+    if (file) {
+        H5Fflush(file->getId(), H5F_SCOPE_GLOBAL);
+        delete ds_xnext;
+        delete ds_uopt;
+        delete ds_xref;
+        delete ds_xcurr;
+        delete file;
     }
 }
 
@@ -226,45 +215,19 @@ void initialize_hdf5() {
         struct stat buffer;
         bool file_exists = (stat(HDF_PATH.c_str(), &buffer) == 0);
 
-        if(file_exists) {
+        if (file_exists) {
             file = new H5File(HDF_PATH, H5F_ACC_RDWR);
-            
-            // Open existing datasets
             ds_xcurr = new DataSet(file->openDataSet("x_current"));
             ds_xref = new DataSet(file->openDataSet("x_ref"));
             ds_uopt = new DataSet(file->openDataSet("u_opt"));
             ds_xnext = new DataSet(file->openDataSet("x_next"));
             
-        // Get current dimensions for x_ref
-        {
-            DataSpace space = ds_xref->getSpace();
-            hsize_t dims[2];
-            space.getSimpleExtentDims(dims);
-            ref_dims[0] = dims[0];
-            ref_dims[1] = dims[1];  // should be 12*(N+1)
-            std::cout << "x_ref size: " << ref_dims[0] << " x " << ref_dims[1] << "\n";
-        }
-        // For u_opt, track its first dimension separately, e.g., u_dims
-        {
-            DataSpace space = ds_uopt->getSpace();
-            hsize_t dims[2];
-            space.getSimpleExtentDims(dims);
-            // You may want a separate array, e.g. u_dims
-            // But if you use current_size[0] for number of rows and second dim is fixed 8,
-            // ensure they match or handle accordingly.
-            std::cout << "u_opt size: " << dims[0] << " x " << dims[1] << "\n";
-        }
-        // x_next has same shape as x_current
-        {
-            DataSpace space = ds_xnext->getSpace();
-            hsize_t dims[2];
-            space.getSimpleExtentDims(dims);
-            std::cout << "x_next size: " << dims[0] << " x " << dims[1] << "\n";
-        }
+            DataSpace space = ds_xcurr->getSpace();
+            space.getSimpleExtentDims(current_size);
         } else {
             file = new H5File(HDF_PATH, H5F_ACC_TRUNC);
             
-            // Create dataspace for extendible datasets
+            // Create extendable datasets
             hsize_t init_dims[2] = {0, 12};
             hsize_t max_dims[2] = {H5S_UNLIMITED, 12};
             DataSpace x_space(2, init_dims, max_dims);
@@ -277,25 +240,24 @@ void initialize_hdf5() {
             hsize_t u_max[2] = {H5S_UNLIMITED, 8};
             DataSpace u_space(2, u_init, u_max);
 
-            // Add chunking properties
+            // Set chunk properties
             DSetCreatPropList props;
             props.setChunk(2, STATE_CHUNK);
+            props.setDeflate(6);
             
             DSetCreatPropList ref_props;
             ref_props.setChunk(2, REF_CHUNK);
+            ref_props.setDeflate(6);
             
             DSetCreatPropList u_props;
             u_props.setChunk(2, U_CHUNK);
+            u_props.setDeflate(6);
 
-            // Create datasets with chunking
-            ds_xcurr = new DataSet(file->createDataSet("x_current", 
-                PredType::NATIVE_DOUBLE, x_space, props));
-            ds_xref = new DataSet(file->createDataSet("x_ref", 
-                PredType::NATIVE_DOUBLE, ref_space, ref_props));
-            ds_uopt = new DataSet(file->createDataSet("u_opt", 
-                PredType::NATIVE_DOUBLE, u_space, u_props));
-            ds_xnext = new DataSet(file->createDataSet("x_next", 
-                PredType::NATIVE_DOUBLE, x_space, props));
+            // Create datasets
+            ds_xcurr = new DataSet(file->createDataSet("x_current", PredType::NATIVE_DOUBLE, x_space, props));
+            ds_xref = new DataSet(file->createDataSet("x_ref", PredType::NATIVE_DOUBLE, ref_space, ref_props));
+            ds_uopt = new DataSet(file->createDataSet("u_opt", PredType::NATIVE_DOUBLE, u_space, u_props));
+            ds_xnext = new DataSet(file->createDataSet("x_next", PredType::NATIVE_DOUBLE, x_space, props));
         }
     } catch (const Exception& e) {
         std::cerr << "HDF5 Error: " << e.getCDetailMsg() << "\n";
@@ -350,25 +312,8 @@ void draw_goal(float x, float y) {
 void draw_obstacles(const std::vector<float2>& obstacles) {
     if (obstacles.empty()) return;
     
-    const float RADIUS = 4.0f;
-    const int SEGMENTS = 36;
-    
-    glColor3f(1.0f, 0.0f, 0.0f);
-    glLineWidth(0.5f);
-    
-    for (const auto& obs : obstacles) {
-        glBegin(GL_LINE_LOOP);
-        for (int i = 0; i < SEGMENTS; i++) {
-            float theta = 2.0f * M_PI * float(i) / float(SEGMENTS);
-            float dx = RADIUS * cosf(theta);
-            float dy = RADIUS * sinf(theta);
-            glVertex2f(obs.x + dx, obs.y + dy);
-        }
-        glEnd();
-    }
-    
-    // Optional: Draw center points (keep if you want visible markers)
-    glPointSize(3.0f);
+    glColor3f(1.0f, 0.0f, 0.0f); // Red
+    glPointSize(5.0f);
     glBegin(GL_POINTS);
     for (const auto& obs : obstacles) {
         glVertex2f(obs.x, obs.y);
@@ -449,6 +394,7 @@ void visualization_thread_func() {
     window = nullptr;
 }
 
+// Helper to convert int2 to float2 with sliding map correction
 float2 int2_to_float2(int2 pt, const EnvironmentMap& map) {
     float2 world;
     // Calculate world position considering map sliding
@@ -457,7 +403,12 @@ float2 int2_to_float2(int2 pt, const EnvironmentMap& map) {
     return world;
 }
 
-void update_visualization_data(const std::vector<float2>& new_obstacles, const EnvironmentMap& map, const DM& x0, const std::vector<float2>& ref_traj, const float2& goal_pos) {
+// Modified visualization update to handle sliding
+void update_visualization_data(const std::vector<float2>& new_obstacles,
+                              const EnvironmentMap& map,
+                              const DM& x0, 
+                              const Path& path,
+                              const float2& goal_pos) {
     std::lock_guard<std::mutex> lock(vis_mutex);
     
     // Update obstacles (only add new ones)
@@ -485,139 +436,116 @@ void update_visualization_data(const std::vector<float2>& new_obstacles, const E
     
     // Convert path to world coordinates with sliding correction
     vis_data.path_points.clear();
-    vis_data.path_points = ref_traj;
+    for (int k = 0; k < path.length; k++) {
+        vis_data.path_points.push_back(int2_to_float2(path.points[k], map));
+    }
 }
-
 
 int main() {
     std::signal(SIGINT, sigint_handler);
     try {
+        // Start visualization thread
+        std::thread visualization_thread(visualization_thread_func);
+        
+        // Wait for the visualization window to initialize
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        
         initialize_hdf5();
         VehicleModel model("config.json");
         NonlinearMPC mpc("config.json", N);
         mpc.initialization();
-        std::thread visualization_thread(visualization_thread_func);
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
         for (int scenario = 0; scenario < MAX_SCENARIOS && !shutdown_requested; ++scenario) {
             // Create environment with random obstacles
             EnvironmentMap map(WIDTH, HEIGHT);
             int num_obstacles = MIN_OBSTACLES + rand() % (MAX_OBSTACLES - MIN_OBSTACLES);
             
+            // Track obstacles for visualization
             std::vector<float2> scenario_obstacles;
-
-            float ref_x = rand_uniform(-15.0f, 15.0f);
-            float ref_y = rand_uniform(-15.0f, 15.0f);
-            float2 goal_pos = {ref_x, ref_y};
-
-            for (int i = 0; i < num_obstacles; ) {
-                float x = rand_uniform(-15.0f, 15.0f);
-                float y = rand_uniform(-15.0f, 15.0f);
-                
-                // Skip if near start/goal
-                if (hypot(x, y) < 4.3f || 
-                    hypot(x - ref_x, y - ref_y) < 4.3f) {
-                    continue;
-                }
+            
+            // Add obstacles to the map
+            for (int i = 0; i < num_obstacles; ++i) {
+                float x = rand_uniform(-20.0f, 20.0f);
+                float y = rand_uniform(-20.0f, 20.0f);
                 map.updateSinglePoint(x, y, 255.0f);
                 scenario_obstacles.push_back({x, y});
-                i++;
             }
 
-            DM x0 = generate_X_current();
-            DM x_ref = DM::repmat(DM::vertcat({ref_x, ref_y, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, N+1);
+            // Set random reference point
+            float ref_x = rand_uniform(-15.0f, 15.0f);
+            float ref_y = rand_uniform(-15.0f, 15.0f);
+            map.updateSinglePoint(ref_x, ref_y, 240.0f);
             map.set_ref(ref_x, ref_y);
-            if (VISUALIZE) map.updateSinglePoint(ref_x, ref_y, 240.0f);
-            double nu1 = static_cast<double>(x0(6));
-            double nu2 = static_cast<double>(x0(7));
-            map.set_velocity(nu1, nu2);
+            float2 goal_pos = {ref_x, ref_y};
 
-            std::cout << "Starting Velocity: " << nu1 << ", " << nu2 << "\n"; 
+            // Generate random initial state
+            DM x0 = generate_X_current();
+            double start_x = static_cast<double>(x0(0));
+            double start_y = static_cast<double>(x0(1));
             
-            update_visualization_data(scenario_obstacles, map, x0, std::vector<float2>{}, goal_pos);
+            // Update visualization with initial state
+            update_visualization_data(scenario_obstacles, map, x0, Path{nullptr, 0}, goal_pos);
 
-            mpc.reset_previous_solution();
+            Path path;
 
             for (int step = 0; step < MAX_STEPS_PER_SCENARIO && !shutdown_requested; ++step) {
-                std::vector<float2> traj;
                 double eta1 = static_cast<double>(x0(0));
                 double eta2 = static_cast<double>(x0(1));
-                double eta6 = static_cast<double>(x0(5));
-
+                
                 // Update map with current position
-                if (VISUALIZE) map.updateSinglePoint(eta1, eta2, 140.0f);
+                map.updateSinglePoint(eta1, eta2, 200.0f);
                 map.slide(eta1, eta2);
                 map.set_ref(ref_x, ref_y);
 
                 // Generate path with A*
-                Path path = map.findPath();
+                path = map.findPath();
                 if (path.length == 0) {
                     std::cerr << "No path found!\n";
                     break;
                 }
 
-                // Create reference trajectory
-                int m = std::min(path.length, N+1);
-                float spacing = static_cast<float>(std::min((m-1) / N, 6));
-                std::vector<float2> path_points;
+                // Update visualization with current map state
+                update_visualization_data({}, map, x0, path, goal_pos);
                 
-                for (int k = 0; k < m; k++) {
-                    path_points.push_back(createPath(m, k, spacing, map, path));
+                // Convert path to world coordinates for MPC reference
+                std::vector<float2> path_points;
+                for (int k = 0; k < path.length; k++) {
+                    path_points.push_back(int2_to_float2(path.points[k], map));
                 }
+
+                // Create reference trajectory for MPC
+                int m = std::min(path.length, N+1);
+                DM x_ref = DM::zeros(12, N+1);
+                double current_depth = static_cast<double>(x0(2));
                 
                 for (int k = 0; k <= N; k++) {
-                    // Get current position in reference trajectory
                     float2 world_coor = (k < m) ? path_points[k] : make_float2(ref_x, ref_y);
                     
-                    // Calculate yaw using improved method
-                    float angle;
+                    // Calculate yaw angle
+                    double angle;
                     if (k < m - 1) {
-                        // Use next point in path
                         float2 next_coor = path_points[k+1];
-                        angle = atan2f(next_coor.y - world_coor.y, next_coor.x - world_coor.x);
-                    }
-                    else if (k == m - 1 && m >= 2) {
-                        // Use previous point for last path point
+                        angle = atan2(next_coor.y - world_coor.y, next_coor.x - world_coor.x);
+                    } else if (k == m - 1 && m >= 2) {
                         float2 prev_coor = path_points[k-1];
-                        angle = atan2f(world_coor.y - prev_coor.y, world_coor.x - prev_coor.x);
+                        angle = atan2(world_coor.y - prev_coor.y, world_coor.x - prev_coor.x);
+                    } else {
+                        angle = atan2(ref_y - eta2, ref_x - eta1);
                     }
-                    else {
-                        // For beyond path or single-point paths
-                        angle = atan2f(ref_y - eta2, ref_x - eta1);
-                    }
-
-                    // Handle degenerate cases
-                    if (std::isnan(angle)) {
-                        angle = (k > 0) ? static_cast<double>(x_ref(5, k-1)) : eta6;
-                        std::cerr << "Warning: NaN angle at step " << step << ", using previous angle: " << angle << "\n";
-                    }
-
-                    // Apply low-pass filter for smoother transitions
-                    if (k > 0) {
-                        float prev_angle = static_cast<double>(x_ref(5, k-1));
-                        float diff = angle - prev_angle;
-                        
-                        // Normalize angle difference to [-π, π]
-                        if (diff > M_PI) diff -= 2*M_PI;
-                        if (diff < -M_PI) diff += 2*M_PI;
-                        
-                        // Apply smoothing (adjust 0.2-0.3 for different responsiveness)
-                        angle = prev_angle + 0.3 * diff;
-                    }
-
-                    // Set references
+                    
+                    // Set reference state
                     x_ref(0, k) = world_coor.x;
                     x_ref(1, k) = world_coor.y;
+                    x_ref(2, k) = current_depth;
                     x_ref(5, k) = angle;
-                    traj.push_back(make_float2(world_coor.x, world_coor.y));
-                    if (VISUALIZE && (step <=  1 || step % 40 == 0)) map.updateSinglePoint(world_coor.x, world_coor.y, 80.0f);
+                    if (step < 2) map.updateSinglePoint(world_coor.x, world_coor.y, 49.0f);
                 }
-                
-                update_visualization_data(scenario_obstacles, map, x0, traj, goal_pos);
 
                 // Solve MPC
                 auto [u_opt, x_opt] = mpc.solve(x0, x_ref);
                 DM x_next = x_opt(Slice(), 1);
+
+                if (step >= MAX_STEPS_PER_SCENARIO-1 || step%55 == 0 || step < 1) map.save(std::to_string(step));
 
                 // Check solution validity
                 bool valid_solution = true;
@@ -632,7 +560,7 @@ int main() {
                     std::cerr << "Invalid MPC solution\n";
                     break;
                 }
-                
+
                 // Store data
                 auto x0_vec = dm_to_vector(x0);
                 auto x_ref_vec = dm_to_vector(x_ref);
@@ -644,46 +572,50 @@ int main() {
                 u_opt_buf.insert(u_opt_buf.end(), u_opt_vec.begin(), u_opt_vec.end());
                 x_next_buf.insert(x_next_buf.end(), x_next_vec.begin(), x_next_vec.end());
 
+                // Write data in chunks
                 if (x_current_buf.size() >= CHUNK_SIZE * 12) {
                     write_chunk();
                 }
 
+                // Update state for next iteration
                 x0 = x_next;
-                auto state_error = x_ref(Slice(), 0) - x0;
 
-                std::cout << "Step " << step << "\n"
-                            << "  Controls: " << u_opt << "\n"
-                            << "  State: " << x0 << "\n"
-                            << "  Reference: " << x_ref(Slice(), 0) << "\n"
-                            << "  Path Lenth: " << path.length << "\n"
-                            << "  State Error: " << state_error << "\n";
-                if (VISUALIZE && (step >= MAX_STEPS_PER_SCENARIO-1 || step % 40 == 0 || step <= 1)) map.save(std::to_string(step));
-
-                // double dist_to_goal = sqrt(pow(static_cast<double>(x0(0)) - ref_x, 2) + 
-                //                      pow(static_cast<double>(x0(1)) - ref_y, 2));
-                // if (dist_to_goal < COLLISION_THRESHOLD) {
-                //     std::cout << "\nGoal reached!\n";
-                // }
-
-                // Free path resources
-                if (path.points) {
-                    free(path.points);
+                // Check if goal is reached
+                double dist_to_goal = sqrt(pow(static_cast<double>(x0(0)) - ref_x, 2) + 
+                                     pow(static_cast<double>(x0(1)) - ref_y, 2));
+                if (dist_to_goal < COLLISION_THRESHOLD) {
+                    std::cout << "Goal reached in " << step << " steps!\n";
+                    // break;
                 }
-                // Clear obstacles for next scenario
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                
+                // Slow down for visualization
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            
+            // Free path resources
+            if (path.points) {
+                free(path.points);
+            }
+            
+            // Clear obstacles for next scenario
             {
                 std::lock_guard<std::mutex> lock(vis_mutex);
                 vis_data.obstacles.clear();
-            }            
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            std::cout << "\nCompleted scenario " << scenario << "/" << MAX_SCENARIOS << "\n";
+            }
+            
+            std::cout << "Completed scenario " << scenario << "/" << MAX_SCENARIOS << "\n";
         }
         
         cleanup_hdf5();
+        shutdown_requested = true;
+        if (visualization_thread.joinable()) {
+            visualization_thread.join();
+        }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
         cleanup_hdf5();
+        shutdown_requested = true;
         return 1;
     }
     return 0;

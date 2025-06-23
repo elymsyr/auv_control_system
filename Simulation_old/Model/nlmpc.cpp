@@ -16,10 +16,6 @@ void NonlinearMPC::initialization() {
     setup_optimization();
 }
 
-void NonlinearMPC::reset_previous_solution() {
-    prev_sol_ = std::nullopt;
-}
-
 std::pair<DM, DM> NonlinearMPC::solve(const DM& x0, const DM& x_ref) {
     opti_.set_value(x0_param_, x0);
     opti_.set_value(x_ref_param_, x_ref);

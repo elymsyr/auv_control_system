@@ -84,8 +84,7 @@
         "__split_buffer": "cpp",
         "__tree": "cpp",
         "queue": "cpp",
-        "stack": "cpp",
-        "expected": "cpp"
+        "stack": "cpp"
     },
     "cmake.sourceDirectory": "/home/eren/GitHub/Simulation/Control"
 }

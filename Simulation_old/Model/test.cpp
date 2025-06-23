@@ -1,10 +1,10 @@
 // cd /home/eren/GitHub/Simulation/Model
 // rm -f *.o *.so jit_* libdynamics_func* *.bin *.txt
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c environment_helper.cpp -o environment_helper.o
-// nvcc -allow-unsupported-compiler -arch=sm_75 -c environment_map.cu -o environment_map.o
-// nvcc -allow-unsupported-compiler -arch=sm_75 -c environment_astar.cu -o environment_astar.o
-// nvcc -allow-unsupported-compiler -arch=sm_75 -c environment_global.cu -o environment_global.o
-// nvcc -allow-unsupported-compiler -arch=sm_75 -dc -I"${CONDA_PREFIX}/include" test.cpp -o test.o
+// nvcc -arch=sm_75 -c environment_map.cu -o environment_map.o
+// nvcc -arch=sm_75 -c environment_astar.cu -o environment_astar.o
+// nvcc -arch=sm_75 -c environment_global.cu -o environment_global.o
+// nvcc -arch=sm_75 -dc -I"${CONDA_PREFIX}/include" test.cpp -o test.o
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c nlmpc.cpp -o nlmpc.o
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c vehicle_model.cpp -o vehicle_model.o
 // g++ -o test environment_helper.o environment_map.o environment_astar.o environment_global.o test.o vehicle_model.o nlmpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lcasadi -lipopt -lzmq -lcudart -L/usr/local/cuda/lib64
