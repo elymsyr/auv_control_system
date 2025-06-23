@@ -4,9 +4,7 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/Control/**",
-                "/home/eren/GitHub/Simulation",
-                "/home/eren/GitHub/Simulation/Control/include",
-                "/home/eren/GitHub/Simulation/Control/src",
+                "${workspaceFolder}/**",
                 "/usr/include",
                 "/usr/local/include",
                 "${CONDA_PREFIX}/include",
