@@ -1,0 +1,23 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/src",
+                "/usr/include",
+                "/usr/local/include",
+                "${CONDA_PREFIX}/include",
+                "/home/eren/miniconda3/envs/mppi/include",
+                "/usr/local/cuda-12.4/include"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/clang-18",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-clang-x64"
+        }
+    ],
+    "version": 4
+}

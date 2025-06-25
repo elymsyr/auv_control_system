@@ -13,92 +13,70 @@ A modular control system framework for robotics and autonomous vehicles, featuri
 - **NonlinearMPC**: Implements nonlinear MPC using CasADi, with warm-starting and robust fallback.
 - **EnvironmentMap**: CUDA-accelerated occupancy grid for mapping and collision checking.
 - **Barrier Functions**: Fast GPU-based evaluation for safe trajectory planning.
-- **A\***: GPU-accelerated A* path planning (see `AStar.cu`).
+- **A\***: GPU-accelerated A* path planning (see `environment_astar.cu`).
 
 ## Directory Structure
 
 ```
 ControlSystem/
+├── .gitignore
+├── Control
+│   ├── build.py
+│   ├── codes.py
+│   ├── comm.py
+│   ├── include
+│   │   ├── communication_system.h
+│   │   ├── control_system.h
+│   │   ├── environment.h
+│   │   ├── environment_system.h
+│   │   ├── main_system.h
+│   │   ├── mission_system.h
+│   │   ├── motion_system.h
+│   │   ├── nlmpc.h
+│   │   ├── subsystem.h
+│   │   ├── topics.hpp
+│   │   └── vehicle_model.h
+│   └── src
+│       ├── control_system.cpp
+│       ├── environment_astar.cu
+│       ├── environment_global.cu
+│       ├── environment_helper.cpp
+│       ├── environment_map.cu
+│       ├── environment_system.cpp
+│       ├── main.cpp
+│       ├── main_system.cpp
+│       ├── mission_system.cpp
+│       ├── motion_system.cpp
+│       ├── nlmpc.cpp
+│       └── vehicle_model.cpp
 ├── Simulation
 │   ├── Assets
 │   │   ├── Models
 │   │   │   ├── Environment
-│   │   │   │   └── Pool.prefab
 │   │   │   ├── Materials
-│   │   │   │   ├── line.mat
-│   │   │   │   ├── shapes.mat
-│   │   │   │   ├── walls.mat
-│   │   │   │   └── water.mat
 │   │   │   ├── Missions
-│   │   │   │   └── Line Mission.prefab
 │   │   │   └── Vehicle
-│   │   │       └── vehicle.fbx
 │   │   └── Scripts
 │   │       ├── CameraPoser.cs
+│   │       ├── EnvironmentTcpSubscriber.cs
+│   │       ├── Missions
+│   │       │   └── AsteroidFieldGenerator.cs
 │   │       ├── SonarRayCast.cs
 │   │       ├── SonarTCPPublisher.cs
-│   │       ├── SonarTCPSubscriber.cs
 │   │       ├── bridge.py
 │   │       └── test.py
-│   ├── Control
-│   │   ├── build.py
-│   │   ├── codes.py
-│   │   ├── comm.py
-│   │   ├── include
-│   │   │   ├── communication_system.h
-│   │   │   ├── control_system.h
-│   │   │   ├── environment.h
-│   │   │   ├── environment_system.h
-│   │   │   ├── main_system.h
-│   │   │   ├── mission_system.h
-│   │   │   ├── motion_system.h
-│   │   │   ├── nlmpc.h
-│   │   │   ├── subsystem.h
-│   │   │   ├── topics.hpp
-│   │   │   └── vehicle_model.h
-│   │   └── src
-│   │       ├── control_system.cpp
-│   │       ├── environment_astar.cu
-│   │       ├── environment_global.cu
-│   │       ├── environment_helper.cpp
-│   │       ├── environment_map.cu
-│   │       ├── environment_system.cpp
-│   │       ├── main.cpp
-│   │       ├── main_system.cpp
-│   │       ├── mission_system.cpp
-│   │       ├── motion_system.cpp
-│   │       ├── nlmpc.cpp
-│   │       └── vehicle_model.cpp
 │   ├── Packages
 │   └── ProjectSettings
-├── build.py
-├── codes.py
-├── comm.py
-├── include
-│   ├── communication_system.h
-│   ├── control_system.h
-│   ├── environment.h
-│   ├── environment_system.h
-│   ├── main_system.h
-│   ├── mission_system.h
-│   ├── motion_system.h
-│   ├── nlmpc.h
-│   ├── subsystem.h
-│   ├── topics.hpp
-│   └── vehicle_model.h
-├── src
-│   ├── control_system.cpp
-│   ├── environment_astar.cu
-│   ├── environment_global.cu
-│   ├── environment_helper.cpp
-│   ├── environment_map.cu
-│   ├── environment_system.cpp
-│   ├── main.cpp
-│   ├── main_system.cpp
-│   ├── mission_system.cpp
-│   ├── motion_system.cpp
-│   ├── nlmpc.cpp
-│   └── vehicle_model.cpp
+├── Test
+│   ├── Model
+│   ├── il
+│   ├── il-map
+│   ├── map-entegrated-mpc
+│   ├── mpc
+│   └── ppo
+└── environment.yml
+└── README.md
+└── TODO.md
 └── tree.py
 ```
 
@@ -117,16 +95,12 @@ ControlSystem/
 2. Clone this repository:
     ```sh
     git clone https://github.com/yourusername/ControlSystem.git
-    cd ControlSystem
+    cd ControlSystem/Control
     ```
-3. See [build](build.py) with CMake
-
-## Usage
-
-- **Configure your vehicle**: Edit the JSON config file with your vehicle’s parameters.
-- **Run the MPC**: Use the `NonlinearMPC` class in your main application.
-- **Map the environment**: Use `EnvironmentMap` and related CUDA kernels for fast mapping and collision checking.
-- **Plan paths**: Use the GPU-accelerated A* implementation.
+3. Build using the provided [build.py](build.py) script or with CMake:
+    ```sh
+    python build.py
+    ```
 
 ## Troubleshooting
 
@@ -135,9 +109,3 @@ ControlSystem/
 - **See [NVIDIA CUDA GPUs](https://developer.nvidia.com/cuda-gpus) for compatibility.**
 
 ## License
-
-MIT License
-
----
-
-*This project is under active development. Contributions and issues are welcome!*
