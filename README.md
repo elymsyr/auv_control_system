@@ -109,3 +109,4 @@ ControlSystem/
 - **See [NVIDIA CUDA GPUs](https://developer.nvidia.com/cuda-gpus) for compatibility.**
 
 ## License
+[GNU GENERAL PUBLIC LICENSE](LICENSE)
