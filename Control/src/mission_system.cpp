@@ -1,5 +1,6 @@
 #include "mission_system.h"
 #include "environment.h"
+#include <casadi/casadi.hpp>
 
 MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_code)
     : testsonar_sub_(testsonar_state, testsonar_mtx), env_sub_(env_state, env_mtx), Subsystem(name, runtime, system_code) 
@@ -12,7 +13,8 @@ MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_
         signal_pub_.bind("tcp://localhost:5562");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    map_ = new EnvironmentMap(129, 129);
+    map_ = new EnvironmentMap(129, 129, 40);
+    x_ref = casadi::DM::repmat(casadi::DM::vertcat({20, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, map_->N+1);
     env_state.set();
     mission_state.set();
     signal_state.set();
@@ -31,13 +33,73 @@ void MissionSystem::init_() {
 }
 
 void MissionSystem::function() {
-    // double* degree = testsonar_state.degree;
-    // double* detections = testsonar_state.detection;
+    double* degree;
+    double* detections;
+    std::array<double, 12> state;
+    {
+        std::lock_guard lk(testsonar_mtx);
+        degree = testsonar_state.degree;
+        detections = testsonar_state.detection;
+    }
+    {
+        std::lock_guard lk(env_mtx);
+        state = env_state.get_array();
+    }
+    map_->slide(state[0], state[1]);
+    float3* obstacle_world = convert_obs_to_world(state, degree, detections);
+    for (int i = 0 ; i < 10 ; i ++) {
+        map_->updateSinglePoint(obstacle_world[i].x, obstacle_world[i].y, 255.0f);
+    }
+    delete[] obstacle_world;
     
-    // {
-    //     std::lock_guard lk(mtx);
+    Path path = map_->findPath(20.0f, 16.0f);
 
-    // }
+    for (int k = 0; k <= map_->N; k++) {
+        float2 position = path.trajectory[k];
+        float yaw = path.angle[k];
+        
+        // Use in controller
+        x_ref(0, k) = position.x;
+        x_ref(1, k) = position.y;
+        x_ref(5, k) = yaw;
+    }
+
+    mission_state.set();
+}
+
+float3* MissionSystem::convert_obs_to_world(std::array<double, 12> state, double* degree, double* detections) {
+    float3* obstacle_world = new float3[10];
+    // Extract robot's position and orientation
+    double robot_x = state[0];
+    double robot_y = state[1];
+    double robot_z = state[2];
+    double yaw = state[5];
+    
+    const double deg2rad = M_PI / 180.0;
+    double cos_yaw = std::cos(yaw);
+    double sin_yaw = std::sin(yaw);
+    
+    for (int i = 0; i < 10; i++) {
+        // Convert angle from degrees to radians
+        double angle_rad = degree[i] * deg2rad;
+        
+        // Convert sonar reading to Cartesian in robot's local frame
+        double local_x = detections[i] * std::cos(angle_rad);
+        double local_y = detections[i] * std::sin(angle_rad);
+        
+        // Rotate and translate to world coordinates
+        double world_x = local_x * cos_yaw - local_y * sin_yaw + robot_x;
+        double world_y = local_x * sin_yaw + local_y * cos_yaw + robot_y;
+        double world_z = robot_z
+        
+        // Store as float3
+        obstacle_world[i] = { 
+            static_cast<float>(world_x), 
+            static_cast<float>(world_y), 
+            static_cast<float>(world_z)
+        };
+    }
+    return obstacle_world;
 }
 
 void MissionSystem::publish() {

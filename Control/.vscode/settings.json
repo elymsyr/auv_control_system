@@ -1,5 +1,5 @@
 {
-    "cmake.sourceDirectory": "~/GitHub/ControlSystem/Control/CMakeLists.txt",
+    "cmake.sourceDirectory": "/home/eren/GitHub/ControlSystem/Control",
     "files.associations": {
         "algorithm": "cpp",
         "cmath": "cpp",
@@ -95,7 +95,9 @@
         "locale": "cpp",
         "ios": "cpp",
         "__locale": "cpp",
-        "__string": "cpp"
+        "__string": "cpp",
+        "__functional_base": "cpp",
+        "stream_ref": "cpp"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

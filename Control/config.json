@@ -55,7 +55,7 @@
                 "torque_coefficient": 0.1,
                 "force_range_f_m": {
                     "unit": "newton",
-                    "max": 80.0
+                    "max": 30.0
                 },
                 "force_range_r": {
                     "unit": "newton_meter",

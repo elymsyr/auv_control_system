@@ -62,7 +62,7 @@ void MainSystem::init_() {
     int retries = 100;
     while (!command_sub_.is_running() && attempts < retries) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        command_sub_.connect("tcp://192.168.212.15:8889");
+        command_sub_.connect("tcp://localhost:8889");
         attempts++;
     }
     initialized = true;

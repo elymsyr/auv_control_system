@@ -21,8 +21,6 @@ class EnvironmentSystem : public Subsystem {
 public:
     EnvironmentTopic env_state;
     MotionTopic motion_state;
-    VehicleModel vehicle_model;
-    Function dyn_func;
     
     EnvironmentSystem(std::string name = "Environment", int runtime = 50, unsigned int system_code = 0);
     void init_() override;
@@ -32,12 +30,6 @@ protected:
     void function() override;
     void publish() override;
     std::mutex motion_mtx;
-
-private:
-    MX eta_sym = MX::sym("eta", 6);
-    MX nu_sym   = MX::sym("nu", 6);
-    MX u_sym    = MX::sym("u", 8);
-    double dt;
 };
 
 #endif // ENVIRONMENT_H

@@ -38,6 +38,8 @@ struct Node {
 struct Path {
     int2* points;
     int length;
+    float2* trajectory;
+    float* angle;
 };
 
 struct PointBatch {
@@ -48,7 +50,7 @@ struct PointBatch {
 
 class EnvironmentMap {
 public:
-    EnvironmentMap(int width, int height);
+    EnvironmentMap(int width, int height, int N);
     ~EnvironmentMap();
 
     void slide(float dx, float dy);
@@ -60,8 +62,6 @@ public:
     void save(std::string name) const;
 
     std::vector<std::pair<float, float>> obstacle_selection(int number_obs = 0);
-    void set_ref(float x, float y);
-    void set_velocity(float vx, float vy);
 
     static class PointBatch* createPointBatch(int count);
     static void destroyPointBatch(class PointBatch* batch);
@@ -70,8 +70,9 @@ public:
 
     // astar
     // void updateGrid();
-    Path findPath();
+    Path findPath(float ref_x, float ref_y, float nu_x = 0.0f, float nu_y = 0.0f);
     void copyNodeToHost(float* host_buffer, const char mode = 'f') const;
+    void resetAll();
 
     int width_;
     int height_;
@@ -86,7 +87,8 @@ public:
     float circle_radius_ = 10.0f;
     int number_obs_to_feed_ = 50;
     int max_iter_ = 1000;
-    int obstacle_radius_ = 7;
+    int obstacle_radius_ = 12;
+    int N;
 
 private:
     float round_;
@@ -99,6 +101,7 @@ private:
     int* d_count;
     int start_x;
     int start_y;
+    float spacing_factor_;
 
     // astar
     void initializeGrid();
@@ -119,10 +122,18 @@ __global__ void singlePointUpdateKernel(uint8_t* grid, int width, int height, fl
 __global__ void obstacleSelectionKernel(uint8_t* grid, int width, int height, float wx, float wy, float* output_dists, float2* output_coords, int* output_count, int max_output, float circle_radius, float r_m_);
 
 // astar kernel
+__global__ void adjustGoalKernel(uint8_t* grid, int width, int height, int goal_x, int goal_y, int* adjusted_goal);
 __device__ float atomicMinFloat(float* address, float val);
 __global__ void initKernel(Node* grid, int width, int height);
 __global__ void resetGridKernel(Node* grid, uint8_t* map, int width, int height, int goal_x, int goal_y);
+__global__ void resetAllKernel(Node* grid, uint8_t* map, int width, int height);
 __global__ void wavefrontKernel(Node* grid, int width, int height, int* d_updated);
 __global__ void reconstructPathKernel(Node* grid, int2* path, int* path_length, int start_x, int start_y, int goal_x, int goal_y, int width);
+__global__ void adjustPointToOpenNode(uint8_t* grid, int width, int height, int x, int y, int* adjusted_point);
+__global__ void samplePathKernel(int2* raw_path, int raw_path_length, float2* trajectory, int N, int grid_width, int grid_height, float r_m, float2 world_position);
+__global__ void computeYawKernel(float2* trajectory, float* angles, int N);
+__global__ void smoothAnglesKernel(float* angles, int N, float smooth_factor);
+__global__ void computeCurvatureKernel(int2* path, int path_length, float* curvatures);
+__global__ void adaptiveSamplePathKernel(int2* raw_path, int raw_path_length,  float* curvatures, float2* trajectory, int N, int grid_width, int grid_height, float r_m, float2 world_position, float spacing_factor);
 
 #endif

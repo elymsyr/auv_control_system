@@ -47,18 +47,12 @@ void MotionSystem::function() {
         
         auto solution = mpc.solve(x0, x_ref);
         DM propeller = solution.first;
+        DM x_next = solution.second(Slice(), 1);
         
         {
             std::lock_guard<std::mutex> lk(mtx);
-            motion_state.set(propeller);
+            motion_state.set(propeller, x_next);
         }
-        // {
-        //     std::cout << "REAL Propeller values: ";
-        //     for (int i = 0; i < 8; ++i) {
-        //         std::cout << static_cast<double>(propeller(i)) << " ";
-        //     }
-        //     std::cout << std::endl;
-        // }
     } catch (const std::exception& e) {
         std::cerr << "MotionSystem error: " << e.what() << std::endl;
     }

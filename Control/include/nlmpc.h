@@ -14,8 +14,6 @@ public:
     NonlinearMPC(const std::string& config_path, int N = 40, double dt = 0.1);
     void reset_previous_solution();
     std::pair<DM, DM> solve(const DM& x0, const DM& x_ref);
-    void set_obstacle_weight(double weight);
-    void set_obstacle_epsilon(double epsilon);
     void initialization();
     int num_obstacles_, N_;
 private:

@@ -6,7 +6,7 @@
 #include <cuda_runtime.h>
 #include <cfloat>
 
-EnvironmentMap::EnvironmentMap(int width, int height) : width_(width), height_(height), r_m_(0.25f), round_(2 * M_PI) {
+EnvironmentMap::EnvironmentMap(int width, int height, int N) : width_(width), height_(height), N(N), spacing_factor_(1.0f), r_m_(0.25f), round_(2 * M_PI) {
     int2 init = make_int2(0, 0);
     shift_ = init;
     shift_total_ = init;
@@ -146,8 +146,8 @@ void EnvironmentMap::slide(float x, float y) {
     shift_total_.x += shift_.x;
     shift_total_.y += shift_.y;
 
-    std::cout << "world_position_: " << world_position_.x << ", " << world_position_.y << "\n"
-                << "shift_total_: " << shift_total_.x << ", " << shift_total_.y << "\n";
+    // std::cout << "world_position_: " << world_position_.x << ", " << world_position_.y << "\n"
+    //             << "shift_total_: " << shift_total_.x << ", " << shift_total_.y << "\n";
 
     dim3 threads(16, 16);
     dim3 blocks((width_ + threads.x - 1) / threads.x,
@@ -223,25 +223,6 @@ void EnvironmentMap::save(std::string name) const {
     delete[] node_buffer;
 }
 
-void EnvironmentMap::set_velocity(float vx, float vy) {
-    v_.x = vx;
-    v_.y = vy;
-}
-
-void EnvironmentMap::set_ref(float ref_x, float ref_y) {
-    ref_.x = ref_x;
-    ref_.y = ref_y;
-    ref_x = (ref_x - world_position_.x) / r_m_ + (width_ / 2.0f);
-    ref_y = (ref_y - world_position_.y) / r_m_ + (height_ / 2.0f);
-    ref_x = std::max(0.0f, std::min(ref_x, static_cast<float>(width_ - 1)));
-    ref_y = std::max(0.0f, std::min(ref_y, static_cast<float>(height_ - 1)));
-    dim3 threads(16, 16);
-    dim3 blocks((width_ + threads.x - 1) / threads.x,
-                (height_ + threads.y - 1) / threads.y);
-    resetGridKernel<<<blocks, threads>>>(node_grid_, grid_, width_, height_, static_cast<int>(ref_x), static_cast<int>(ref_y));
-    CUDA_CALL(cudaDeviceSynchronize());
-}
-
 void EnvironmentMap::debug_grid_update(float world_x, float world_y) {
     // Calculate expected grid coordinates
     int x_coor = static_cast<int>((world_x - world_position_.x) / r_m_ + width_ / 2.0f);
@@ -314,4 +295,12 @@ void EnvironmentMap::copyNodeToHost(float* host_buffer, const char mode) const {
         fprintf(stderr, "Invalid mode '%c' in copyNodeToHost\n", mode);
     }
     delete[] node_buffer;
+}
+
+void EnvironmentMap::resetAll() {
+    dim3 threads(16, 16);
+    dim3 blocks((width_ + threads.x - 1) / threads.x,
+                (height_ + threads.y - 1) / threads.y);
+    resetAllKernel<<<blocks, threads>>>(node_grid_, grid_, width_, height_);
+    CUDA_CALL(cudaDeviceSynchronize());
 }

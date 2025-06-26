@@ -1,5 +1,5 @@
 // conda activate mppi
-// cd /home/eren/GitHub/Simulation/Model
+// cd /home/eren/GitHub/ControlSystem/Test/Model
 // rm -f *.o *.so jit_* libdynamics_func* *.bin *.csv visualized
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c environment_helper.cpp -o environment_helper.o
 // nvcc -allow-unsupported-compiler -arch=sm_75 -c environment_map.cu -o environment_map.o
@@ -28,7 +28,6 @@
 #include <thread>
 #include <mutex>
 #include <algorithm>
-
 
 #include "helpers.hpp"
 #include "visualization.hpp"

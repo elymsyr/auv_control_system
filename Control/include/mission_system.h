@@ -6,6 +6,7 @@
 #include "topics.hpp"
 #include "communication_system.h"
 #include <iostream>
+#include <casadi/casadi.hpp>
 #include <chrono>
 #include <zmq_addon.hpp>
 #include <any>
@@ -29,6 +30,9 @@ public:
 
 private:
     EnvironmentMap* map_ = nullptr;
+    casadi::DM x_ref;
+
+    float3* convert_obs_to_world(std::array<double, 12> state, double* degree, double* detections);
 
 protected:
     void function() override;

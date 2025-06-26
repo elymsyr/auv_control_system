@@ -5,7 +5,7 @@ bash = """
         sudo ss -ltnp | grep -E ':(5560|5561|5562|5563|8889)\\b'
         sudo fuser -k 5560/tcp 5561/tcp 5562/tcp 5563/tcp 8889/tcp
         conda activate mppi
-        cd /home/eren/GitHub/Simulation/Control
+        cd /home/eren/GitHub/ControlSystem/Control
         rm -rf build
         mkdir -p build && cd build
         cmake -DBOOST_ROOT=$CONDA_PREFIX \

@@ -16,6 +16,10 @@ void NonlinearMPC::initialization() {
     setup_optimization();
 }
 
+void NonlinearMPC::reset_previous_solution() {
+    prev_sol_ = std::nullopt;
+}
+
 std::pair<DM, DM> NonlinearMPC::solve(const DM& x0, const DM& x_ref) {
     opti_.set_value(x0_param_, x0);
     opti_.set_value(x_ref_param_, x_ref);
@@ -122,10 +126,6 @@ void NonlinearMPC::setup_optimization() {
         cost += 5.0 * dot(pos_error, pos_error);  // Position error
         cost += 8.0 * heading_error*heading_error;  // Heading error
         cost += 10.0 * cte*cte;  // Cross-track error
-        
-        if (k < N_) {
-            cost += 0.1 * dot(U_(Slice(), k), U_(Slice(), k));
-        }
     }
 
     for (int k = 0; k < N_-1; ++k) {
@@ -183,12 +183,12 @@ void NonlinearMPC::setup_optimization() {
         {"ipopt.print_level", 2},
         {"print_time", 0},
         {"ipopt.sb", "yes"},
-        {"ipopt.max_iter", 4000},             // Increased iterations
-        {"ipopt.tol", 1e-2},                  // Looser tolerance
+        {"ipopt.max_iter", 5000},             // Increased iterations
+        {"ipopt.tol", 1e-4},                  // Looser tolerance
         {"ipopt.linear_solver", "mumps"},     // Better for nonlinear problems
-        {"ipopt.mu_init", 1e-1},              // Smaller initial barrier
-        {"ipopt.acceptable_tol", 1e-2},       // Looser acceptance tol
-        // {"ipopt.constr_viol_tol", 1e-5},   // Constraint violation tol
+        {"ipopt.mu_init", 1e-6},              // Smaller initial barrier
+        {"ipopt.acceptable_tol", 1e-4},       // Looser acceptance tol
+        {"ipopt.constr_viol_tol", 1e-4},   // Constraint violation tol
         {"ipopt.hessian_approximation", "limited-memory"},
         {"ipopt.nlp_scaling_method", "gradient-based"},
     };

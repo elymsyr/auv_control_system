@@ -46,6 +46,7 @@ private:
     double C_X_, C_Y_, C_Z_, C_Y_r_, C_Z_q_, C_K_, C_M_, C_N_;
     double p_rear_max_, p_front_mid_max_;
     double W_, B_, W_minus_B_;
+    int N;
 
     MX r_g_, r_B_;
     MX A_, M_, M_inv_, Ma_, Dl_, Dn_;

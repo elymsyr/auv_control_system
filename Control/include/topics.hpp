@@ -180,20 +180,32 @@ struct CommandTopic {
 // Motion System Topic
 struct MotionTopic {
     double propeller[8];
+    double x_next[12];
 
     static constexpr const char* TOPIC = "Motion";
 
-    void set(const casadi::DM& propeller_dm) {
-        if (propeller_dm.numel() != 8) {
+    void set(const casadi::DM& propeller_dm, const casadi::DM& x_next_dm) {
+        if (propeller_dm.numel() != 8 || x_next_dm.numel() != 12) {
             throw std::runtime_error("Invalid propeller DM size");
         }
 
         const double* data = propeller_dm.ptr();
         std::copy(data, data + 8, propeller);
+        data = x_next_dm.ptr();
+        std::copy(data, data + 12, x_next);
     }
 
-    void set(const std::array<double, 8>& propeller = {0, 0, 0, 0, 0, 0, 0, 0}) {
+    void set(const std::array<double, 8>& propeller = {0, 0, 0, 0, 0, 0, 0, 0}, const std::array<double, 12>& x_next = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) {
         std::memcpy(this->propeller, propeller.data(), sizeof(this->propeller));
+        std::memcpy(this->x_next, x_next.data(), sizeof(this->x_next));
+    }
+
+    void get(std::vector<double>& propeller_copy, std::vector<double>& x_next_copy) {
+        if (propeller_copy.size() < 8) propeller_copy.resize(8);
+        std::memcpy(propeller_copy.data(), this->propeller, sizeof(this->propeller));
+
+        if (x_next_copy.size() < 12) x_next_copy.resize(12);
+        std::memcpy(x_next_copy.data(), this->x_next, sizeof(this->x_next));
     }
 
     inline void set(const MotionTopic& o) {
