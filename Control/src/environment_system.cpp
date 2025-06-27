@@ -24,21 +24,6 @@ void EnvironmentSystem::init_() {
 }
 
 void EnvironmentSystem::function() {
-    {
-        std::lock_guard<std::mutex> env_lock(mtx);
-        std::cout << "Environment eta: ";
-        for (int i = 0; i < 6; ++i) {
-            std::cout << env_state.eta[i] << " ";
-        }
-        std::cout << "\nEnvironment nu: ";
-        for (int i = 0; i < 6; ++i) {
-            std::cout << env_state.nu[i] << " ";
-        }
-        std::cout << std::endl;
-    }
-
-    
-
     // Copy propeller values safely
     std::vector<double> propeller_copy;
     std::vector<double> x_next_copy;

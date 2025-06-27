@@ -48,6 +48,9 @@ void MissionSystem::function() {
     map_->slide(state[0], state[1]);
     float3* obstacle_world = convert_obs_to_world(state, degree, detections);
     for (int i = 0 ; i < 10 ; i ++) {
+        if (obstacle_world[i].x < 0.2f && obstacle_world[i].y < 0.2f) {
+            continue;
+        }
         map_->updateSinglePoint(obstacle_world[i].x, obstacle_world[i].y, 255.0f);
     }
     delete[] obstacle_world;
@@ -62,9 +65,16 @@ void MissionSystem::function() {
         x_ref(0, k) = position.x;
         x_ref(1, k) = position.y;
         x_ref(5, k) = yaw;
+        if (step % 20 == 0) map_->updateSinglePoint(position.x, position.y, 160.0f);
     }
-
-    mission_state.set();
+    {
+        std::lock_guard lk(mtx);
+        mission_state.set(x_ref);
+    }
+    map_->updateSinglePoint(state[0], state[1], 55.0f);
+    if (step % 20 == 0) map_->save(std::to_string(step));
+    std::cout << "Step: " << step << "\n";
+    step++;
 }
 
 float3* MissionSystem::convert_obs_to_world(std::array<double, 12> state, double* degree, double* detections) {
@@ -80,6 +90,11 @@ float3* MissionSystem::convert_obs_to_world(std::array<double, 12> state, double
     double sin_yaw = std::sin(yaw);
     
     for (int i = 0; i < 10; i++) {
+        if (detections[i] < 0.1f) {
+            obstacle_world[i] = {0.0f, 0.0f, 0.0f};
+            continue;
+        }
+
         // Convert angle from degrees to radians
         double angle_rad = degree[i] * deg2rad;
         
@@ -90,14 +105,10 @@ float3* MissionSystem::convert_obs_to_world(std::array<double, 12> state, double
         // Rotate and translate to world coordinates
         double world_x = local_x * cos_yaw - local_y * sin_yaw + robot_x;
         double world_y = local_x * sin_yaw + local_y * cos_yaw + robot_y;
-        double world_z = robot_z
+        double world_z = robot_z;
         
         // Store as float3
-        obstacle_world[i] = { 
-            static_cast<float>(world_x), 
-            static_cast<float>(world_y), 
-            static_cast<float>(world_z)
-        };
+        obstacle_world[i] = {static_cast<float>(world_x), static_cast<float>(world_y), static_cast<float>(world_z)};
     }
     return obstacle_world;
 }

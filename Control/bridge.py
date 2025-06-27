@@ -96,8 +96,7 @@ class EnvironmentSubscriber(threading.Thread):
                 
             logging.debug(f"Updated environment: pos=({pos_x:.2f}, {pos_y:.2f}, {pos_z:.2f}) "
                           f"rot=({roll_deg:.2f}, {pitch_deg:.2f}, {yaw_deg:.2f})")
-            print(f"Updated environment: pos=({pos_x:.2f}, {pos_y:.2f}, {pos_z:.2f}) "
-                          f"rot=({roll_deg:.2f}, {pitch_deg:.2f}, {yaw_deg:.2f})")
+
         except Exception as e:
             logging.error(f"Environment data processing error: {str(e)}")
 
@@ -187,12 +186,12 @@ class UnityEnvironmentServer(threading.Thread):
                     rot = latest_environment['rotation']
                 
                 # Format as comma-separated string
-                data_str = (f"{pos[1]:.4f},{(-1 * pos[2]):.4f},{pos[0]:.4f},"
+                data_str = (f"{pos[1]:.4f},{(pos[2]):.4f},{pos[0]:.4f},"
                             f"{rot[1]:.4f},{rot[2]:.4f},{rot[0]:.4f}")
                 data_bytes = data_str.encode('utf-8')
                 
                 # Add little-endian length header
-                header = struct.pack('<I', len(data_bytes))
+                header = struct.pack('>I', len(data_bytes))
                 client_socket.sendall(header + data_bytes)
                 time.sleep(0.05)  # ~20Hz
         except (ConnectionResetError, BrokenPipeError):

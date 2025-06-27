@@ -129,6 +129,31 @@ struct MissionTopic {
     //     }
     // }
 
+    void set(const casadi::DM& x_ref) {
+        // Verify matrix dimensions
+        if (x_ref.size1() != 12) {
+            throw std::invalid_argument("x_ref must have exactly 12 rows");
+        }
+        
+        const int horizon_cols = x_ref.size2();
+        const double* data = x_ref.ptr();
+        
+        for (int k = 0; k < HORIZON; k++) {
+            // Use last column if horizon exceeds trajectory length
+            const int col_idx = (k < horizon_cols) ? k : horizon_cols - 1;
+            
+            // Extract eta (position/orientation) - first 6 elements
+            for (int i = 0; i < 6; i++) {
+                eta_des[k][i] = data[col_idx * 12 + i];
+            }
+            
+            // Extract nu (velocities) - next 6 elements
+            for (int i = 0; i < 6; i++) {
+                nu_des[k][i] = data[col_idx * 12 + 6 + i];
+            }
+        }
+    }
+
     std::array<double, 12> get_array() {
         std::array<double, 12> arr;
         std::memcpy(arr.data(), eta_des, 6 * sizeof(double));

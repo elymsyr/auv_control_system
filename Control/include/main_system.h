@@ -40,7 +40,7 @@ class MainSystem : public Subsystem {
     CommandTopic command_received;
 
 public:
-    MainSystem(std::string name = "Main", int runtime = 200, unsigned int system_code = 0, std::unordered_map<SystemID, int> system_configs = { {SystemID::MISSION, 500}, {SystemID::CONTROL, 500}, {SystemID::MOTION, 500}, {SystemID::ENVIRONMENT, 500} });
+    MainSystem(std::string name = "Main", int runtime = 200, unsigned int system_code = 0, std::unordered_map<SystemID, int> system_configs = { {SystemID::MISSION, 2000}, {SystemID::CONTROL, 2000}, {SystemID::MOTION, 2000}, {SystemID::ENVIRONMENT, 2000} });
     ~MainSystem();
     void init_() override;
     void start_test();

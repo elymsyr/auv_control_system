@@ -36,7 +36,6 @@ find_library(ZeroMQ_LIBRARY
 find_package(CASADI   REQUIRED)
 find_package(Boost    1.65 REQUIRED COMPONENTS system)
 find_package(OpenCV REQUIRED COMPONENTS dnn)
-find_package(OpenSSL  REQUIRED)
 find_package(ZLIB     REQUIRED)
 
 # ─── Include Directories ───────────────────────────────────────────────────────
@@ -45,7 +44,6 @@ include_directories(
     ${CASADI_INCLUDE_DIR}
     ${ZeroMQ_INCLUDE_DIR}
     ${Boost_INCLUDE_DIRS}
-    ${OPENSSL_INCLUDE_DIR}
     ${ZLIB_INCLUDE_DIRS}
 )
 
@@ -83,8 +81,6 @@ target_link_libraries(control_system PRIVATE
     ${ZeroMQ_LIBRARY}
     Boost::system
     ${OpenCV_LIBS}
-    OpenSSL::SSL
-    OpenSSL::Crypto
     ZLIB::ZLIB
     pthread
     dl

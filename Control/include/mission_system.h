@@ -31,7 +31,7 @@ public:
 private:
     EnvironmentMap* map_ = nullptr;
     casadi::DM x_ref;
-
+    int step = 0;
     float3* convert_obs_to_world(std::array<double, 12> state, double* degree, double* detections);
 
 protected:

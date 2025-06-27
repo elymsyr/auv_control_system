@@ -44,10 +44,10 @@ void MotionSystem::function() {
         if (x0.is_empty() || x_ref.is_empty()) {
             throw std::runtime_error("Empty state received");
         }
-        
         auto solution = mpc.solve(x0, x_ref);
         DM propeller = solution.first;
-        DM x_next = solution.second(Slice(), 1);
+        DM x_opt = solution.second;
+        DM x_next = x_opt(Slice(), 1);
         
         {
             std::lock_guard<std::mutex> lk(mtx);
