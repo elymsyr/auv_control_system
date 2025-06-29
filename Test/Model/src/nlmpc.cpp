@@ -98,9 +98,17 @@ void NonlinearMPC::setup_optimization() {
         cg.add(grad_dynamics);
         cg.generate();
 
-        std::system ("gcc -fPIC -shared -O3 libdynamics_func.c -o libdynamics_func.so");
+        int result = std::system("gcc -fPIC -shared -O3 libdynamics_func.c -o libdynamics_func.so");
+        if (result != 0) {
+            std::cerr << "Failed to build libdynamics_func.so (error: " << result << ")" << std::endl;
+        }
     }
-    dynamics_func = external("dynamics_func", "./libdynamics_func.so", external_options);
+
+    try {
+        dynamics_func = external("dynamics_func", "./libdynamics_func.so", external_options);
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to load external dynamics_func: " << e.what() << std::endl;
+    }
 
     MX Q = MX::diag(MX::vertcat({4.0, 4.0, 5.0, 2.0, 2.0, 2.5,
                                     0.0, 2.0, 0.1, 0.1, 0.1, 0.1}));

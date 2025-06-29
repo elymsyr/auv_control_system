@@ -2,17 +2,6 @@
 #include <iostream>
 #include <atomic>
 
-const int WIDTH = 129;
-const int HEIGHT = 129;
-float ref_x = 20.0f;
-float ref_y = 10.0f;
-const int MAX_OBSTACLES = 10;
-const int MIN_OBSTACLES = 2;
-const float OBSTACLE_THRESHOLD = 250.0f;
-const int MAX_STEPS = 5;
-const int MAX_SCENARIOS = 4;
-const int CHUNK_SIZE = 100;
-
 // Global state
 std::atomic<bool> shutdown_requested(false);
 std::random_device rd;

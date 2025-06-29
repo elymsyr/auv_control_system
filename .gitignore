@@ -1,8 +1,5 @@
-/build
-/solvers
-
-Simulation/Control/build
-Simulation/Control/solvers
+Test/Model/build
+Control/build
 
 .utmp/
 Simulation/[Ll]ibrary/

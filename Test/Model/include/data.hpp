@@ -5,7 +5,7 @@
 
 using namespace H5;
 
-const std::string HDF_PATH = "mpc_data.h5";
+const std::string HDF_PATH = "data.h5";
 const int N = 40;
 
 // HDF5 handles
@@ -80,6 +80,7 @@ void write_chunk() {
     x_ref_buf.clear();
     u_opt_buf.clear();
     x_next_buf.clear();
+    std::cout << "\nChunk is written and cleared...\n";
 }
 
 void cleanup_hdf5() {

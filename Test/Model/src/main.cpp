@@ -1,15 +1,29 @@
 // conda activate mppi
 // cd /home/eren/GitHub/ControlSystem/Test/Model
-// rm -f *.o *.so jit_* libdynamics_func* *.bin *.csv generate
+// rm -f *.o *.so jit_* libdynamics_func* *.bin *.csv main
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c environment_helper.cpp -o environment_helper.o
 // nvcc -allow-unsupported-compiler -arch=sm_75 -c environment_map.cu -o environment_map.o
 // nvcc -allow-unsupported-compiler -arch=sm_75 -c environment_astar.cu -o environment_astar.o
 // nvcc -allow-unsupported-compiler -arch=sm_75 -c environment_global.cu -o environment_global.o
-// nvcc -allow-unsupported-compiler -arch=sm_75 -dc -I"${CONDA_PREFIX}/include" generate.cpp -o generate.o
+// nvcc -allow-unsupported-compiler -arch=sm_75 -dc -I"${CONDA_PREFIX}/include" main.cpp -o main.o
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c nlmpc.cpp -o nlmpc.o
 // g++ -std=c++17 -I"${CONDA_PREFIX}/include" -c vehicle_model.cpp -o vehicle_model.o
-// g++ -o generate environment_helper.o environment_map.o environment_astar.o environment_global.o generate.o vehicle_model.o nlmpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lcasadi -lcudart -lhdf5_cpp -lhdf5 -L/usr/local/cuda/lib64
-// ./generate
+// g++ -o main environment_helper.o environment_map.o environment_astar.o environment_global.o main.o vehicle_model.o nlmpc.o -L"${CONDA_PREFIX}/lib" -Wl,-rpath,"${CONDA_PREFIX}/lib" -lcasadi -lcudart -lhdf5_cpp -lhdf5 -L/usr/local/cuda/lib64
+// ./main
+
+// conda activate mp_test
+// cd /home/eren/GitHub/ControlSystem/Test/Model
+// rm -rf build
+// mkdir build
+// cd build
+// cmake -DBOOST_ROOT="$CONDA_PREFIX" \
+//     -DCMAKE_CXX_COMPILER="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++" \
+//     -DCMAKE_CUDA_HOST_COMPILER="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc" \
+//     -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
+//     -DCMAKE_BUILD_TYPE=Debug ..
+// make -j4
+// ./test
+
 
 #include "environment.h"
 #include "nlmpc.h"
@@ -21,24 +35,92 @@
 #include <H5Cpp.h>
 #include <random>
 #include <atomic>
+#include <getopt.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <algorithm>
 
 #include "data.hpp"
 #include "helpers.hpp"
 #include <csignal>
 
-int main() {
+const int MAX_OBSTACLES = 12;
+const int MIN_OBSTACLES = 3;
+bool do_reset = false;
+int MAX_STEPS = 100;
+int MAX_SCENARIOS = 1000;
+const int WIDTH = 129;
+const int HEIGHT = 129;
+float ref_x = 20.0f;
+float ref_y = 10.0f;
+const float OBSTACLE_THRESHOLD = 250.0f;
+const int CHUNK_SIZE = 100;
+
+void print_usage(const char* prog) {
+    std::cout << "Usage: " << prog << " [options]\n"
+              << "  -r, --reset               Delete .h5 file before starting\n"
+              << "  -s, --step <N>            Set max steps (default 100)\n"
+              << "  -p, --plan <M>            Set max scenarios (default 1000)\n"
+              << "  -h, --help                Show this help\n";
+}
+
+int main(int argc, char** argv) {
+    const char* short_opts = "rs:p:h";
+    const struct option long_opts[] = {
+        {"reset", no_argument,        nullptr, 'r'},
+        {"step",  required_argument,  nullptr, 's'},
+        {"plan",  required_argument,  nullptr, 'p'},
+        {"help",  no_argument,        nullptr, 'h'},
+        {nullptr, 0,                  nullptr,  0 }
+    };
+
+    int opt;
+    while ((opt = getopt_long(argc, argv, short_opts, long_opts, nullptr)) != -1) {
+        switch (opt) {
+            case 'r':
+                do_reset = true;
+                break;
+            case 's':
+                MAX_STEPS = std::atoi(optarg);
+                if (MAX_STEPS < 0) {
+                    std::cerr << "Invalid --step value\n";
+                    return EXIT_FAILURE;
+                }
+                break;
+            case 'p':
+                MAX_SCENARIOS = std::atoi(optarg);
+                if (MAX_SCENARIOS < 0) {
+                    std::cerr << "Invalid --plan value\n";
+                    return EXIT_FAILURE;
+                }
+                break;
+            case 'h':
+            case '?':
+            default:
+                print_usage(argv[0]);
+                return (opt == 'h') ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
+    }
+
+    std::cout << "reset = " << do_reset
+              << ", max_steps = " << MAX_STEPS
+              << ", max_scenarios = " << MAX_SCENARIOS << "\n";
+
+    // If --reset, remove the file
+    if (do_reset) {
+        const char* filename = "data.h5";
+        if (unlink(filename) == 0)
+            std::cout << "Removed " << filename << "\n";
+        else if (errno != ENOENT)
+            perror("Error deleting .h5 file");
+    }
+
     std::signal(SIGINT, sigint_handler);
     try {
-        const int WIDTH = 129;
-        const int HEIGHT = 129;
         const int N = 40;
-        float ref_x = 20.0f;
-        float ref_y = 10.0f;
         EnvironmentMap map(WIDTH, HEIGHT, N);
-        VehicleModel model("config.json"); 
-        NonlinearMPC mpc("config.json", N);
+        VehicleModel model("../config.json"); 
+        NonlinearMPC mpc("../config.json", N);
         mpc.initialization();
         initialize_hdf5();
 
@@ -76,7 +158,6 @@ int main() {
                 double eta2 = static_cast<float>(static_cast<double>(x0(1)));
                 double eta6 = static_cast<float>(static_cast<double>(x0(5)));
                 
-                map.updateSinglePoint(eta1, eta2, 190.0f);
                 map.slide(eta1, eta2);
                 
                 Path path = map.findPath(ref_x, ref_y);
@@ -90,7 +171,6 @@ int main() {
                     x_ref(0, k) = position.x;
                     x_ref(1, k) = position.y;
                     x_ref(5, k) = yaw;
-                    if (step%20 == 0) map.updateSinglePoint(position.x, position.y, 50.0f);
                 }
 
                 auto [u_opt, x_opt] = mpc.solve(x0, x_ref);
@@ -122,22 +202,19 @@ int main() {
 
                 x0 = x_next;
 
-                // Save current state and reference
-                if (step == MAX_STEPS-1 || step%20 == 0) {
-                    map.save(std::to_string(step));
-                }
                 if (path.points) {
                     free(path.points);
                 }
             }
-            cleanup_hdf5();
-            std::cout << "\nCompleted scenario " << scenario << "/" << MAX_SCENARIOS << "\n";
+            std::cout << "\nCompleted scenario " << scenario + 1 << "/" << MAX_SCENARIOS << "\n";
         }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
         cleanup_hdf5();
         return 1;
     }
+    write_chunk();
+    cleanup_hdf5();
     return 0;
 }
 
