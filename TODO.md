@@ -7,7 +7,8 @@
 
 <summary><b><u><font size="5">TODO</font></u></b></summary>
 
-- [ ] [generate.cpp](Test/Model/generate.cpp) will be completed
-- [ ] Fix the model drift problem
-- [ ] Fix the path following problem
+- [x] [generate.cpp](Test/Model/generate.cpp) will be completed
+- [x] Fix the model drift problem
+- [x] Fix the path following problem
 - [ ] Improve dynamic path generation
+- [ ] Implement Mission Template and Mission System
