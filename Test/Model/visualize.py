@@ -3,11 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from glob import glob
 
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-from glob import glob
-
 def visualize_all():
     base_names = set()
     os.chdir('build')

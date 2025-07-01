@@ -255,6 +255,8 @@ int main(int argc, char** argv) {
                 std::lock_guard<std::mutex> lock(vis_mutex);
                 vis_data.obstacles.clear();
             }
+            scenario_obstacles.clear();
+
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             std::cout << "\nCompleted scenario " << scenario << "/" << MAX_SCENARIOS << "\n";
         }
