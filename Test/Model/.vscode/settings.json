@@ -87,7 +87,9 @@
         "stack": "cpp",
         "expected": "cpp",
         "__locale": "cpp",
-        "__string": "cpp"
+        "__string": "cpp",
+        "ios": "cpp",
+        "__node_handle": "cpp"
     },
     "cmake.sourceDirectory": "/home/eren/GitHub/ControlSystem/Test/Model"
 }

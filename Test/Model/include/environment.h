@@ -67,6 +67,7 @@ public:
     static void destroyPointBatch(class PointBatch* batch);
     static void fillPointBatchWithRandom(class PointBatch* batch, int grid_width, int grid_height);
     void debug_grid_update(float world_x, float world_y);
+    bool is_safe();
 
     // astar
     // void updateGrid();
@@ -88,6 +89,7 @@ public:
     int number_obs_to_feed_ = 50;
     int max_iter_ = 1000;
     int obstacle_radius_ = 12;
+    int N;
 
 private:
     float round_;
@@ -100,7 +102,6 @@ private:
     int* d_count;
     int start_x;
     int start_y;
-    int N;
     float spacing_factor_;
 
     // astar

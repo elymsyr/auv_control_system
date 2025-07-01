@@ -10,6 +10,7 @@ from glob import glob
 
 def visualize_all():
     base_names = set()
+    os.chdir('build')
     bin_files = glob('*.bin')
 
     # Extract base names

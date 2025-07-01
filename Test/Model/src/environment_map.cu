@@ -281,7 +281,7 @@ void EnvironmentMap::copyNodeToHost(float* host_buffer, const char mode) const {
     
     if (mode == 'f') {
         for (int i = 0; i < node_count; ++i) {
-            host_buffer[i] = node_buffer[i].g + node_buffer[i].h;
+            host_buffer[i] = node_buffer[i].g == FLT_MAX ? 255 : node_buffer[i].g + node_buffer[i].h;
         }
     } else if (mode == 'g') {
         for (int i = 0; i < node_count; ++i) {
@@ -303,4 +303,11 @@ void EnvironmentMap::resetAll() {
                 (height_ + threads.y - 1) / threads.y);
     resetAllKernel<<<blocks, threads>>>(node_grid_, grid_, width_, height_);
     CUDA_CALL(cudaDeviceSynchronize());
+}
+
+bool EnvironmentMap::is_safe() {
+    uint8_t value;
+    cudaMemcpy(&value, grid_ + ((height_ / 2) * (width_ + (width_ / 2))), sizeof(uint8_t), cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
+    return value < 250;
 }

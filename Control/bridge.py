@@ -314,8 +314,8 @@ def main():
     # Create components
     env_sub = EnvironmentSubscriber(ZMQ_ENV_ENDPOINT)
     sonar_pub = TestSonarPublisher(ZMQ_SONAR_ENDPOINT)
-    unity_env_server = UnityEnvironmentServer(host="192.168.13.107", port=UNITY_ENV_PORT)
-    unity_sonar_server = UnitySonarServer(host="192.168.13.107", port=UNITY_SONAR_PORT)
+    unity_env_server = UnityEnvironmentServer(host="192.168.229.107", port=UNITY_ENV_PORT)
+    unity_sonar_server = UnitySonarServer(host="192.168.229.107", port=UNITY_SONAR_PORT)
     
     # Start components
     env_sub.start()

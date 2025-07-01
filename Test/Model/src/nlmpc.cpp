@@ -111,7 +111,7 @@ void NonlinearMPC::setup_optimization() {
     }
 
     MX Q = MX::diag(MX::vertcat({4.0, 4.0, 5.0, 2.0, 2.0, 2.5,
-                                    0.0, 2.0, 0.1, 0.1, 0.1, 0.1}));
+                                    0.0, 4.0, 0.1, 0.1, 0.1, 0.1}));
     MX R = MX::diag(MX::vertcat({0.1, 0.1, 0.1, 0.1, 0.05, 0.05, 0.05, 0.05}));
 
     MX cost = 0;

@@ -15,6 +15,7 @@
 struct VisualizationData {
     std::vector<float2> obstacles;
     std::vector<float2> path_points;
+    std::vector<float> path_angles;
     float2 vehicle_pos = {0.0f, 0.0f};
     float vehicle_yaw = 0.0f;
     float2 goal_pos = {0.0f, 0.0f};
@@ -100,6 +101,43 @@ void draw_obstacles(const std::vector<float2>& obstacles) {
     glEnd();
 }
 
+void draw_orientation_indicators(const std::vector<float2>& points, const std::vector<float>& angles) {
+    if (points.size() != angles.size()) return;
+    
+    glColor3f(0.0f, 1.0f, 1.0f);
+    glLineWidth(1.5f);
+    
+    for (size_t i = 0; i < (int)points.size()/20; i++) {
+        // Only draw every 5th indicator to avoid clutter
+        if (i % 5 != 0) continue;
+        
+        float2 pt = points[i];
+        float angle = angles[i];
+        
+        // Calculate direction vector
+        float arrow_length = 1.0f;
+        float2 dir = {
+            arrow_length * cosf(angle),
+            arrow_length * sinf(angle)
+        };
+        
+        // Draw direction arrow
+        glBegin(GL_LINES);
+        glVertex2f(pt.x, pt.y);
+        glVertex2f(pt.x + dir.x, pt.y + dir.y);
+        glEnd();
+        
+        // Draw arrowhead
+        float arrow_size = 0.3f;
+        float2 perp = {-dir.y * arrow_size, dir.x * arrow_size};
+        glBegin(GL_TRIANGLES);
+        glVertex2f(pt.x + dir.x, pt.y + dir.y);
+        glVertex2f(pt.x + dir.x * 0.7f + perp.x, pt.y + dir.y * 0.7f + perp.y);
+        glVertex2f(pt.x + dir.x * 0.7f - perp.x, pt.y + dir.y * 0.7f - perp.y);
+        glEnd();
+    }
+}
+
 void render_visualization() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
@@ -133,6 +171,7 @@ void render_visualization() {
     // Draw elements
     draw_obstacles(vis_data.obstacles);
     draw_path(vis_data.path_points);
+    draw_orientation_indicators(vis_data.path_points, vis_data.path_angles);
     draw_goal(vis_data.goal_pos.x, vis_data.goal_pos.y);
     draw_vehicle(vis_data.vehicle_pos.x, vis_data.vehicle_pos.y, vis_data.vehicle_yaw);
     
@@ -185,7 +224,7 @@ float2 int2_to_float2(int2 pt, const EnvironmentMap& map) {
 void update_visualization_data(const std::vector<float2>& new_obstacles,
                               const EnvironmentMap& map,
                               const casadi::DM& x0, 
-                              const Path& path,
+                              const Path& path, const int N,
                               const float2& goal_pos) {
     std::lock_guard<std::mutex> lock(vis_mutex);
     
@@ -214,7 +253,13 @@ void update_visualization_data(const std::vector<float2>& new_obstacles,
     
     // Convert path to world coordinates with sliding correction
     vis_data.path_points.clear();
-    for (int k = 0; k < path.length; k++) {
+    for (int k = 0; k < std::min(N, path.length); k++) {
         vis_data.path_points.push_back(path.trajectory[k]);
+    }
+    vis_data.path_points.clear();
+    vis_data.path_angles.clear();
+    for (int k = 0; k < std::min(N, path.length); k++) {
+        vis_data.path_points.push_back(path.trajectory[k]);
+        vis_data.path_angles.push_back(path.angle[k]);
     }
 }

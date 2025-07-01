@@ -23,6 +23,8 @@ find_package(CASADI REQUIRED)
 find_package(Boost 1.65 REQUIRED COMPONENTS system)
 find_package(ZLIB REQUIRED)
 find_package(HDF5 REQUIRED COMPONENTS CXX)  # Provides HDF5::HDF5 target
+find_package(OpenGL REQUIRED)
+find_package(glfw3 REQUIRED)
 
 # Executable
 add_executable(test
@@ -60,6 +62,8 @@ target_link_libraries(test PRIVATE
   HDF5::HDF5  # Use imported target
   pthread
   dl
+  OpenGL::GL
+  glfw
 )
 
 # ─── Optional: Arch-specific flags ─────────────────────────────────────────────
