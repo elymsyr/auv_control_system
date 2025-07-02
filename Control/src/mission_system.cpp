@@ -1,9 +1,11 @@
 #include "mission_system.h"
 #include "environment.h"
 #include <casadi/casadi.hpp>
+#include <mission_imp.h>
+#include <mission_sonar_imp.h>
 
 MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_code)
-    : testsonar_sub_(testsonar_state, testsonar_mtx), env_sub_(env_state, env_mtx), Subsystem(name, runtime, system_code) 
+    : env_sub_(env_state, env_mtx), Subsystem(name, runtime, system_code) 
 {
     for (int i = 0; i < 20 && !mission_pub_.is_bound() ; i++) {
         mission_pub_.bind("tcp://localhost:5561");
@@ -13,21 +15,15 @@ MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_
         signal_pub_.bind("tcp://localhost:5562");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    map_ = new EnvironmentMap(129, 129, 40);
     x_ref = casadi::DM::repmat(casadi::DM::vertcat({20, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}), 1, map_->N+1);
     env_state.set();
     mission_state.set();
     signal_state.set();
-    testsonar_state.set();
 }
 
 void MissionSystem::init_() {
     for (int i = 0; i < 20 && !env_sub_.is_running() ; i++) {
         env_sub_.connect("tcp://localhost:5560");
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-    for (int i = 0; i < 20 && !testsonar_sub_.is_running() ; i++) {
-        testsonar_sub_.connect("tcp://localhost:7778");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
@@ -77,42 +73,6 @@ void MissionSystem::function() {
     step++;
 }
 
-float3* MissionSystem::convert_obs_to_world(std::array<double, 12> state, double* degree, double* detections) {
-    float3* obstacle_world = new float3[10];
-    // Extract robot's position and orientation
-    double robot_x = state[0];
-    double robot_y = state[1];
-    double robot_z = state[2];
-    double yaw = state[5];
-    
-    const double deg2rad = M_PI / 180.0;
-    double cos_yaw = std::cos(yaw);
-    double sin_yaw = std::sin(yaw);
-    
-    for (int i = 0; i < 10; i++) {
-        if (detections[i] < 0.1f) {
-            obstacle_world[i] = {0.0f, 0.0f, 0.0f};
-            continue;
-        }
-
-        // Convert angle from degrees to radians
-        double angle_rad = degree[i] * deg2rad;
-        
-        // Convert sonar reading to Cartesian in robot's local frame
-        double local_x = detections[i] * std::cos(angle_rad);
-        double local_y = detections[i] * std::sin(angle_rad);
-        
-        // Rotate and translate to world coordinates
-        double world_x = local_x * cos_yaw - local_y * sin_yaw + robot_x;
-        double world_y = local_x * sin_yaw + local_y * cos_yaw + robot_y;
-        double world_z = robot_z;
-        
-        // Store as float3
-        obstacle_world[i] = {static_cast<float>(world_x), static_cast<float>(world_y), static_cast<float>(world_z)};
-    }
-    return obstacle_world;
-}
-
 void MissionSystem::publish() {
     std::shared_lock lock(topic_read_mutex);
     mission_pub_.publish(mission_state);
@@ -125,4 +85,35 @@ void MissionSystem::halt() {
     env_sub_.close();
     testsonar_sub_.close();
     initialized = false;
+}
+
+void MissionSystem::setMission(MissionIMP mission_imp) {
+    if (mission_running_) {
+        stopMission();
+    }
+
+    // Create the mission based on the mission_imp
+    if (mission_imp == MissionIMP::SonarMis) {
+        active_mission_ = std::make_unique<SonarMission>();
+    } else {
+        active_mission_ = nullptr;
+        return;
+    }
+
+    if (active_mission_) {
+        active_mission_->initialize();
+    }
+}
+
+void MissionSystem::startMission() {
+    if (active_mission_) {
+        mission_running_ = true;
+    }
+}
+
+void MissionSystem::stopMission() {
+    if (active_mission_ && mission_running_) {
+        active_mission_->terminate();
+        mission_running_ = false;
+    }
 }

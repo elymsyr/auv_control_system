@@ -1,21 +1,14 @@
-// mission.h
-#pragma once
+#ifndef MISSION_H
+#define MISSION_H
+
 #include <casadi/casadi.hpp>
-#include <memory>
 #include <vector>
 #include <string>
 #include <array>
 #include <any>
+#include <functional>
 #include "environment_map.h"
-
-class MissionSystem;
-
-enum MissionReq {
-    SONAR,
-    CAM,
-    LIGHT,
-    GPS
-};
+#include <mutex>
 
 class Mission {
 public:
@@ -23,22 +16,18 @@ public:
     
     std::vector<MissionReq> mission_req_;
 
-    // Main mission interface
-    virtual void initialize(MissionSystem& system) = 0;
-    virtual void terminate() = 0;
-    virtual void report() = 0;
+    // Mission lifecycle methods
+    virtual void initialize() {}
+    virtual std::array<double, 12> step(const std::array<double, 12>& current_state, float2 reference) {}
+    virtual void terminate() {}
+    virtual void report() {}
 
-    // Flexible trajectory generation with custom arguments
-    virtual casadi::DM generate_reference_trajectory(
-        const std::array<double, 12>& current_state,
-        std::any reference) = 0;  // std::any allows different reference types
-    
     // Mission metadata
     std::string name_;
     int id_;
     
     // Map management
-    void create_map(int width, int height, int N) {
+    void create_map(int width = 129, int height = 129, int N = 40) {
         map_ = std::make_unique<EnvironmentMap>(width, height, N);
     }
     
@@ -46,5 +35,6 @@ public:
 
 protected:
     std::unique_ptr<EnvironmentMap> map_;
-    int state_ = 0;
 };
+
+#endif // MISSION_H
