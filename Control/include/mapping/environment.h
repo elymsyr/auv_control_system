@@ -9,6 +9,7 @@
 #include <vector>
 #include <utility>
 #include <cstdint>
+#include "mapping/config.h"
 
 #define CHECK_CUDA(call) { \
     cudaError_t err = call; \
@@ -50,7 +51,7 @@ struct PointBatch {
 
 class EnvironmentMap {
 public:
-    EnvironmentMap(int width, int height, int N);
+    EnvironmentMap();
     ~EnvironmentMap();
 
     void slide(float dx, float dy);
@@ -70,7 +71,7 @@ public:
 
     // astar
     // void updateGrid();
-    Path findPath(float ref_x, float ref_y, float nu_x = 0.0f, float nu_y = 0.0f);
+    Path findPath(float2 ref, float nu_x = 0.0f, float nu_y = 0.0f);
     void copyNodeToHost(float* host_buffer, const char mode = 'f') const;
     void resetAll();
 

@@ -1,9 +1,9 @@
 #ifndef MOTION_H
 #define MOTION_H
 
-#include "subsystem.h"
-#include "topics.hpp"
-#include "communication_system.h"
+#include "system/subsystem.h"
+#include "communication/topics.hpp"
+#include "communication/communication_methods.h"
 #include <iostream>
 #include <chrono>
 #include <zmq_addon.hpp>
@@ -14,8 +14,8 @@
 #include <vector>
 #include <stdexcept>
 #include <casadi/casadi.hpp>
-#include "nlmpc.h"
-#include "vehicle_model.h"
+#include "control/nlmpc.h"
+#include "control/vehicle_model.h"
 
 // class Model {
 //     cv::dnn::Net net;

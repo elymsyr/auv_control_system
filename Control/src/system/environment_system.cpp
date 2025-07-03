@@ -1,5 +1,5 @@
-#include "environment_system.h"
-#include "vehicle_model.h"
+#include "system/environment_system.h"
+#include "control/vehicle_model.h"
 #include <casadi/casadi.hpp>
 #include <algorithm>
 

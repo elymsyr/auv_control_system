@@ -1,4 +1,4 @@
-#include "motion_system.h"
+#include "system/motion_system.h"
 #include <casadi/casadi.hpp>
 
 using namespace casadi;

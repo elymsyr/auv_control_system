@@ -97,7 +97,12 @@
         "__locale": "cpp",
         "__string": "cpp",
         "__functional_base": "cpp",
-        "stream_ref": "cpp"
+        "stream_ref": "cpp",
+        "__node_handle": "cpp",
+        "queue": "cpp",
+        "__hash_table": "cpp",
+        "__split_buffer": "cpp",
+        "stack": "cpp"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

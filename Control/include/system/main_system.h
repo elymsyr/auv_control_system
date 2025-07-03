@@ -1,13 +1,13 @@
 #ifndef MAIN_H
 #define MAIN_H
 
-#include "subsystem.h"
-#include "topics.hpp"
-#include "communication_system.h"
-#include "environment_system.h"
-#include "mission_system.h"
-#include "motion_system.h"
-#include "control_system.h"
+#include "system/subsystem.h"
+#include "communication/topics.hpp"
+#include "communication/communication_methods.h"
+#include "system/environment_system.h"
+#include "system/mission_system.h"
+#include "system/motion_system.h"
+#include "system/control_system.h"
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -27,7 +27,6 @@ enum class Operation {
     STOP,
     HALT,
 };
-
 class MainSystem : public Subsystem {
     SubscriberMain command_sub_;
     bool is_new_ = false;
@@ -47,6 +46,7 @@ public:
     void waitForDestruction();
 
 private:
+    MissionSystem* mission_system;
     void parse_command(int system, int operation); 
     void halt() override;
 

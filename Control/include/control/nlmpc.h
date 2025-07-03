@@ -5,7 +5,7 @@
 #include <vector>
 #include <optional>
 #include <string>
-#include "vehicle_model.h"
+#include "control/vehicle_model.h"
 
 using namespace casadi;
 

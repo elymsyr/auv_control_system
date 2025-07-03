@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include "environment.h"
+#include "mapping/environment.h"
 #include <fstream>
 #include <iostream>
 
@@ -17,14 +17,14 @@ void EnvironmentMap::initializeGrid() {
     CHECK_CUDA(cudaDeviceSynchronize());
 }
 
-Path EnvironmentMap::findPath(float ref_x, float ref_y,  float nu_x, float nu_y) {
+Path EnvironmentMap::findPath(float2 ref,  float nu_x, float nu_y) {
     start_x = width_ / 2;
     start_y = height_ / 2;
     v_.x = nu_x;
     v_.y = nu_y;
 
-    float grid_ref_x = (ref_x - world_position_.x) / r_m_ + (width_ / 2.0f);
-    float grid_ref_y = (ref_y - world_position_.y) / r_m_ + (height_ / 2.0f);
+    float grid_ref_x = (ref.x - world_position_.x) / r_m_ + (width_ / 2.0f);
+    float grid_ref_y = (ref.y - world_position_.y) / r_m_ + (height_ / 2.0f);
     grid_ref_x = std::max(0.0f, std::min(grid_ref_x, static_cast<float>(width_ - 1)));
     grid_ref_y = std::max(0.0f, std::min(grid_ref_y, static_cast<float>(height_ - 1)));
     int goal_x = static_cast<int>(grid_ref_x);

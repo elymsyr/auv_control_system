@@ -1,9 +1,9 @@
 #ifndef CONTROL_H
 #define CONTROL_H
 
-#include "subsystem.h"
-#include "topics.hpp"
-#include "communication_system.h"
+#include "system/subsystem.h"
+#include "communication/topics.hpp"
+#include "communication/communication_methods.h"
 #include <iostream>
 #include <chrono>
 #include <zmq_addon.hpp>

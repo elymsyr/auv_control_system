@@ -5,7 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include "vehicle_model.h"
+#include "control/vehicle_model.h"
 
 using namespace casadi;
 using json = nlohmann::json;

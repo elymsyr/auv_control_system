@@ -1,9 +1,9 @@
 #include <casadi/casadi.hpp>
-#include "nlmpc.h"
+#include "control/nlmpc.h"
 #include <vector>
 #include <optional>
 #include <fstream>
-#include "vehicle_model.h"
+#include "control/vehicle_model.h"
 
 using namespace casadi;
 

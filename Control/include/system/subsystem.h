@@ -7,8 +7,8 @@
 #include <chrono>
 #include <shared_mutex>
 #include <iostream>
-#include "topics.hpp"
-#include "communication_system.h"
+#include "communication/topics.hpp"
+#include "communication/communication_methods.h"
 
 
 class Subsystem {

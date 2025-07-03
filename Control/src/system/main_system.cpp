@@ -1,4 +1,4 @@
-#include "main_system.h"
+#include "system/main_system.h"
 
 MainSystem::MainSystem(std::string name, int runtime, unsigned int system_code, std::unordered_map<SystemID, int> system_configs)
     : command_sub_(command_received, command_mtx, is_new_), Subsystem(name, runtime, system_code), system_configs_(std::move(system_configs))
@@ -12,6 +12,7 @@ MainSystem::MainSystem(std::string name, int runtime, unsigned int system_code, 
                 break;
             case SystemID::MISSION:
                 systems_[id] = std::make_unique<MissionSystem>("Mission", runtime, 2);
+                mission_system = dynamic_cast<MissionSystem*>(systems_[id].get());
                 break;
             case SystemID::MOTION:
                 systems_[id] = std::make_unique<MotionSystem>("Motion", runtime, 3);
@@ -62,7 +63,7 @@ void MainSystem::init_() {
     int retries = 100;
     while (!command_sub_.is_running() && attempts < retries) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        command_sub_.connect("tcp://192.168.229.15:8889");
+        command_sub_.connect("tcp://localhost:8889");
         attempts++;
     }
     initialized = true;
@@ -110,10 +111,35 @@ void MainSystem::parse_command(int system, int operation) {
             }
         }
         else if (system == 6) {
-            std::cout << "Received a mission command\n";
-            return;
-        }
-        else {
+            switch (static_cast<MissionIMP>(operation)) {
+                case MissionIMP::SonarMisTest:
+                    mission_system->setMission(MissionIMP::SonarMisTest);
+                    break;
+                case MissionIMP::FollowMisTest:
+                    std::cout << "FollowMisTest is not implemented yet.\n";
+                    break;
+                case MissionIMP::Test:
+                    std::cout << "Test is not implemented yet.\n";
+                    break;
+                case MissionIMP::SonarMis:
+                    std::cout << "SonarMis is not implemented yet.\n";
+                    break;
+                case MissionIMP::FollowMis:
+                    std::cout << "FollowMis is not implemented yet.\n";
+                    break;
+                case MissionIMP::START:
+                    mission_system->startMission();
+                    break;
+                case MissionIMP::STOP:
+                    mission_system->stopMission();
+                    break;
+                case MissionIMP::REPORT:
+                    mission_system->reportMission();
+                    break;
+                default:
+                    std::cerr << "Unknown operation\n";
+            }
+        } else {
             auto it = systems_.find(static_cast<SystemID>(system));
             if (it != systems_.end()) {
                 switch (static_cast<::Operation>(operation)) {

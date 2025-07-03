@@ -1,4 +1,4 @@
-#include "control_system.h"
+#include "system/control_system.h"
 
 ControlSystem::ControlSystem(std::string name, int runtime, unsigned int system_code) 
     : motion_sub_(motion_state, motion_mtx), signal_sub_(signal_state, signal_mtx), Subsystem(name, runtime, system_code) {}

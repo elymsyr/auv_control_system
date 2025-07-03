@@ -1,19 +1,20 @@
-#include "environment.h"
+#include "mapping/environment.h"
 #include <chrono>
 #include <algorithm>
 #include <tuple>
 #include <stdio.h>
 #include <cuda_runtime.h>
 #include <cfloat>
+#include "mapping/config.h"
 
-EnvironmentMap::EnvironmentMap(int width, int height, int N) : width_(width), height_(height), N(N), spacing_factor_(1.0f), r_m_(0.25f), round_(2 * M_PI) {
+EnvironmentMap::EnvironmentMap() : width_(WIDTH), height_(HEIGHT), N(HORIZON), spacing_factor_(SPACING_FACTOR), r_m_(R_M_), round_(2 * M_PI) {
     int2 init = make_int2(0, 0);
     shift_ = init;
     shift_total_ = init;
     world_position_ = make_float3(0.0f, 0.0f, 0.0f);
     start_x = width_ / 2;
     start_y = height_ / 2;
-    size_t size = width * height * sizeof(uint8_t);
+    size_t size = WIDTH * HEIGHT * sizeof(uint8_t);
     cudaMalloc(&grid_, size);
     cudaMalloc(&tempGrid_, size);
     cudaMemset(grid_, 0, size);

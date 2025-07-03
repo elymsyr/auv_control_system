@@ -1,10 +1,10 @@
 #ifndef ENVIRONMENT_H
 #define ENVIRONMENT_H
 
-#include "subsystem.h"
-#include "topics.hpp"
-#include "communication_system.h"
-#include "vehicle_model.h"
+#include "system/subsystem.h"
+#include "communication/topics.hpp"
+#include "communication/communication_methods.h"
+#include "control/vehicle_model.h"
 #include <iostream>
 #include <chrono>
 #include <zmq_addon.hpp>

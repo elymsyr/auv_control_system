@@ -6,7 +6,6 @@
 #include <vector>
 #include <optional>
 #include <string>
-#include "vehicle_model.h"
 
 using namespace casadi;
 using json = nlohmann::json;

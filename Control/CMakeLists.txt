@@ -39,6 +39,13 @@ find_package(OpenCV REQUIRED COMPONENTS dnn)
 find_package(ZLIB     REQUIRED)
 
 # ─── Include Directories ───────────────────────────────────────────────────────
+file(GLOB_RECURSE SOURCES 
+    "src/*.cpp"
+    "src/*.cu"
+    "src/*/*.cpp"
+    "src/*/*.cu"
+)
+
 include_directories(
     include
     ${CASADI_INCLUDE_DIR}
@@ -50,17 +57,18 @@ include_directories(
 # ─── Executable & Sources ───────────────────────────────────────────────────────
 add_executable(control_system
     src/main.cpp
-    src/main_system.cpp
-    src/control_system.cpp
-    src/environment_system.cpp
-    src/motion_system.cpp
-    src/mission_system.cpp
-    src/environment_astar.cu
-    src/environment_global.cu
-    src/environment_helper.cpp
-    src/environment_map.cu
-    src/nlmpc.cpp
-    src/vehicle_model.cpp  # Now included
+    src/system/main_system.cpp
+    src/system/control_system.cpp
+    src/system/environment_system.cpp
+    src/system/motion_system.cpp
+    src/system/mission_system.cpp
+    src/mapping/environment_astar.cu
+    src/mapping/environment_global.cu
+    src/mapping/environment_helper.cpp
+    src/mapping/environment_map.cu
+    src/control/nlmpc.cpp
+    src/control/vehicle_model.cpp
+    src/mission/mission_sonar_imp.cpp
 )
 
 # ─── CUDA-specific compile options ─────────────────────────────────────────────

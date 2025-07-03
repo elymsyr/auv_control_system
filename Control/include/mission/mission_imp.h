@@ -1,11 +1,19 @@
+#ifndef MISSION_IMP_H
+#define MISSION_IMP_H
+
 #include <any>
 #include <mutex>
 
 enum MissionIMP {
+    SonarMisTest,
+    FollowMisTest,
+    Test,
     SonarMis,
-    LineFollowMis,
-    Test
-}
+    FollowMis,
+    START,
+    STOP,
+    REPORT
+};
 
 // Enum for sensor types
 enum class SensorType {
@@ -140,3 +148,5 @@ struct GPSData : public SensorDataBase<std::array<double, 4>> {
         }
     }
 };
+
+#endif // MISSION_IMP_H

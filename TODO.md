@@ -10,5 +10,6 @@
 - [x] [generate.cpp](Test/Model/generate.cpp) will be completed
 - [x] Fix the model drift problem
 - [x] Fix the path following problem
+- [x] Implement Mission Template and Mission System
 - [ ] Improve dynamic path generation
-- [ ] Implement Mission Template and Mission System
+- [ ] Improve dynamic path for Sonar Test Mission

@@ -3,7 +3,7 @@
 
 #pragma once
 #include <zmq.hpp>
-#include "topics.hpp"
+#include "communication/topics.hpp"
 #include <atomic>
 #include <mutex>
 #include <thread>

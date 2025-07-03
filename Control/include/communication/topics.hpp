@@ -77,23 +77,15 @@ struct MissionTopic {
 
     void set(const std::array<double, 6>& eta = {0, 0, 0, 0, 0, 0},
                                 const std::array<double, 6>& nu = {0, 0, 0, 0, 0, 0}) {
-        for (int i = 0; i < HORIZON; i++) {
-            std::memcpy(eta_des[i], eta.data(), 6 * sizeof(double));
-            std::memcpy(nu_des[i], nu.data(), 6 * sizeof(double));
-        }
-    }
-
-    void set(const std::vector<std::array<double, 6>>& eta_points,
-                        const std::vector<std::array<double, 6>>& nu_points) {
-        if (eta_points.size() != nu_points.size()) {
+        if (eta.size() != nu.size()) {
             throw std::invalid_argument("eta and nu vectors must be same size");
         }
-        if (eta_points.size() > HORIZON) {
+        if (eta.size() > HORIZON) {
             throw std::out_of_range("Too many trajectory points");
         }
         for (int i = 0; i < HORIZON; i++) {
-            std::memcpy(eta_des[i], eta_points[i].data(), 6 * sizeof(double));
-            std::memcpy(nu_des[i], nu_points[i].data(), 6 * sizeof(double));
+            std::memcpy(eta_des[i], eta.data(), 6 * sizeof(double));
+            std::memcpy(nu_des[i], nu.data(), 6 * sizeof(double));
         }
     }
 
@@ -115,19 +107,6 @@ struct MissionTopic {
             }
         }
     }
-
-    // void get_dm(casadi::DM& merged) {
-    //     if (merged.is_empty() || merged.size1() != 12 || merged.size2() != 1) {
-    //         merged = casadi::DM::zeros(12, 1);
-    //     }
-
-    //     // Get writable pointer
-    //     double* data = merged.ptr();
-    //     if (data) {
-    //         std::memcpy(data,     eta_des, 6 * sizeof(double));
-    //         std::memcpy(data + 6, nu_des,   6 * sizeof(double));
-    //     }
-    // }
 
     void set(const casadi::DM& x_ref) {
         // Verify matrix dimensions
@@ -154,10 +133,22 @@ struct MissionTopic {
         }
     }
 
-    std::array<double, 12> get_array() {
-        std::array<double, 12> arr;
-        std::memcpy(arr.data(), eta_des, 6 * sizeof(double));
-        std::memcpy(arr.data() + 6, nu_des, 6 * sizeof(double));
+    void set(const std::array<std::array<double, 12>, HORIZON>& trajectory) {
+        for (int i = 0; i < HORIZON; i++) {
+            // First 6 elements are eta (position/orientation)
+            std::memcpy(eta_des[i], trajectory[i].data(), 6 * sizeof(double));
+            
+            // Next 6 elements are nu (velocities)
+            std::memcpy(nu_des[i], trajectory[i].data() + 6, 6 * sizeof(double));
+        }
+    }
+
+    std::array<std::array<double, 12>, HORIZON> get_array() const {
+        std::array<std::array<double, 12>, HORIZON> arr{};
+        for (int i = 0; i < HORIZON; ++i) {
+            std::memcpy(arr[i].data(), eta_des[i], 6 * sizeof(double));
+            std::memcpy(arr[i].data() + 6, nu_des[i], 6 * sizeof(double));
+        }
         return arr;
     }
 };
