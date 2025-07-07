@@ -90,3 +90,9 @@ The system follows a component-based architecture where modules communicate thro
 
 ## License
 [GNU GENERAL PUBLIC LICENSE](LICENSE)
+
+## Security Notice
+
+**This project is under active development and is not production-ready.**  
+There may be untested features, incomplete security measures, or vulnerabilities.  
+**It is not recommended to use this system in safety-critical or production environments.**
