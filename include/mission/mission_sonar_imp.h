@@ -32,7 +32,6 @@ private:
     void state_3(const std::array<double, 12>& current_state);
     void state_4(const std::array<double, 12>& current_state);
     void state_5(const std::array<double, 12>& current_state);
-    void state_6(const std::array<double, 12>& current_state);
     void setState(int new_state);
     void set_state_list();
 

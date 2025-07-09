@@ -1,9 +1,11 @@
 #include "system/main_system.h"
 
-MainSystem::MainSystem(std::string name, int runtime, unsigned int system_code, std::unordered_map<SystemID, int> system_configs)
+MainSystem::MainSystem(std::string host, bool debug, std::unordered_map<SystemID, int> system_configs, std::string name, int runtime, unsigned int system_code)
     : command_sub_(command_received, command_mtx, is_new_), Subsystem(name, runtime, system_code), system_configs_(std::move(system_configs))
 {
     command_received.set();
+    command_host_ = host;
+    debug_mode_ = debug;
     init();
     for (const auto& [id, runtime] : system_configs_) {
         switch (id) {
@@ -63,7 +65,7 @@ void MainSystem::init_() {
     int retries = 100;
     while (!command_sub_.is_running() && attempts < retries) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        command_sub_.connect("tcp://localhost:8889");
+        command_sub_.connect("tcp://" + command_host_ + ":8889");
         attempts++;
     }
     initialized = true;

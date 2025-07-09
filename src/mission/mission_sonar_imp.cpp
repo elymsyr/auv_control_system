@@ -225,11 +225,11 @@ void SonarMission::state_4(const std::array<double, 12>& current_state) {
 
     if (current_state[2] <= 0.2) {
         std::cout << "  Surface reached!\n";
-        setState(6);
+        setState(5);
     }
 }
 
-void SonarMission::state_6(const std::array<double, 12>& current_state) {
+void SonarMission::state_5(const std::array<double, 12>& current_state) {
     std::cout << "\n[SonarMission] STATE 6 - Mission complete\n";
     for (int k = 0; k < HORIZON; k++) {
         ref_path[k][0] = current_state[0];
@@ -258,6 +258,5 @@ void SonarMission::set_state_list() {
         [this](const std::array<double, 12>& s){ state_3(s); },
         [this](const std::array<double, 12>& s){ state_4(s); },
         [this](const std::array<double, 12>& s){ state_5(s); },
-        [this](const std::array<double, 12>& s){ state_6(s); }
     };
 }

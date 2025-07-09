@@ -39,7 +39,7 @@ class MainSystem : public Subsystem {
     CommandTopic command_received;
 
 public:
-    MainSystem(std::string name = "Main", int runtime = 200, unsigned int system_code = 0, std::unordered_map<SystemID, int> system_configs = { {SystemID::MISSION, 2000}, {SystemID::CONTROL, 2000}, {SystemID::MOTION, 2000}, {SystemID::ENVIRONMENT, 2000} });
+    MainSystem(std::string host = "localhost", bool debug = false, std::unordered_map<SystemID, int> system_configs = { {SystemID::MISSION, 2000}, {SystemID::CONTROL, 2000}, {SystemID::MOTION, 2000}, {SystemID::ENVIRONMENT, 2000} }, std::string name = "Main", int runtime = 200, unsigned int system_code = 0);
     ~MainSystem();
     void init_() override;
     void start_test();
@@ -49,6 +49,9 @@ private:
     MissionSystem* mission_system;
     void parse_command(int system, int operation); 
     void halt() override;
+    
+    std::string command_host_;
+    bool debug_mode_;
 
 protected:
     void function() override;
