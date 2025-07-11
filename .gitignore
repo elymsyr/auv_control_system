@@ -2,6 +2,7 @@ build
 build.py
 .vscode
 ptree.py
+models
 
 *.log
 
