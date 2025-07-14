@@ -98,12 +98,20 @@ void NonlinearMPC::setup_optimization() {
         cg.add(grad_dynamics);
         cg.generate();
 
-        std::system ("gcc -fPIC -shared -O3 libdynamics_func.c -o libdynamics_func.so");
+        int result = std::system("gcc -fPIC -shared -O3 libdynamics_func.c -o libdynamics_func.so");
+        if (result != 0) {
+            std::cerr << "Failed to build libdynamics_func.so (error: " << result << ")" << std::endl;
+        }
     }
-    dynamics_func = external("dynamics_func", "./libdynamics_func.so", external_options);
+
+    try {
+        dynamics_func = external("dynamics_func", "./libdynamics_func.so", external_options);
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to load external dynamics_func: " << e.what() << std::endl;
+    }
 
     MX Q = MX::diag(MX::vertcat({4.0, 4.0, 5.0, 2.0, 2.0, 2.5,
-                                    0.0, 2.0, 0.1, 0.1, 0.1, 0.1}));
+                                    0.0, 4.0, 0.1, 0.1, 0.1, 0.1}));
     MX R = MX::diag(MX::vertcat({0.1, 0.1, 0.1, 0.1, 0.05, 0.05, 0.05, 0.05}));
 
     MX cost = 0;
@@ -115,17 +123,34 @@ void NonlinearMPC::setup_optimization() {
             cost += mtimes(mtimes(U_(Slice(), k).T(), R), U_(Slice(), k));
         }
 
+        // Position error (x,y)
         MX pos_error = X_(Slice(0,2), k) - x_ref_param_(Slice(0,2), k);
-        MX heading_error = X_(5,k) - x_ref_param_(5,k);
         
-        // Cross-track error (perpendicular distance)
-        MX dx = cos(x_ref_param_(5,k));
-        MX dy = sin(x_ref_param_(5,k));
-        MX cte = dy*(X_(0,k)-x_ref_param_(0,k)) - dx*(X_(1,k)-x_ref_param_(1,k));
+        // Reduced heading error weight
+        MX heading_error = X_(5, k) - x_ref_param_(5, k);
+        MX forward_error = if_else(X_(6, k) >= 0, X_(6, k)-X_(6, k), X_(6, k));
         
-        cost += 5.0 * dot(pos_error, pos_error);  // Position error
-        cost += 8.0 * heading_error*heading_error;  // Heading error
-        cost += 10.0 * cte*cte;  // Cross-track error
+        // Enhanced cross-track error calculation
+        MX ref_heading = x_ref_param_(6, k);
+        MX path_tangent_x = cos(ref_heading);
+        MX path_tangent_y = sin(ref_heading);
+        
+        MX pos_diff_x = X_(0,k) - x_ref_param_(0,k);
+        MX pos_diff_y = X_(1,k) - x_ref_param_(1,k);
+        
+        // CTE = perpendicular distance to path tangent
+        MX cte = path_tangent_y * pos_diff_x - path_tangent_x * pos_diff_y;
+        
+        // Body-frame lateral velocity penalty (critical for drift prevention)
+        MX v_lat = X_(7, k); 
+        
+        cost += 12.0 * dot(pos_error, pos_error);
+        cost += 15.0 * heading_error*heading_error;
+        cost += 10.0 * forward_error*forward_error;
+        cost += 8.0 * cte*cte;
+        
+        // Drift prevention terms
+        cost += 14.0 * v_lat*v_lat;
     }
 
     for (int k = 0; k < N_-1; ++k) {
