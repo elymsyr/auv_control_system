@@ -32,6 +32,8 @@ public:
     void stopMission();
     void reportMission();
 
+    std::string getMission();
+
 private:
     std::unique_ptr<Mission> active_mission_;
     bool mission_running_ = false;

@@ -46,6 +46,10 @@ public:
     
     virtual void report() {}
 
+    virtual std::string getMissionName() const {
+        return name_;
+    }
+
 private:
     void create_map() {
         map_ = std::make_unique<EnvironmentMap>();

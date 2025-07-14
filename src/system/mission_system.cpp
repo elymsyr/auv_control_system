@@ -103,3 +103,10 @@ void MissionSystem::reportMission() {
         active_mission_->report();
     }
 };
+
+std::string MissionSystem::getMission() {
+    if (active_mission_) {
+        return active_mission_->getMissionName();
+    }
+    return "No active mission";
+}

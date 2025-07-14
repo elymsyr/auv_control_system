@@ -116,6 +116,7 @@ void MainSystem::parse_command(int system, int operation) {
             switch (static_cast<MissionIMP>(operation)) {
                 case MissionIMP::SonarMisTest:
                     mission_system->setMission(MissionIMP::SonarMisTest);
+                    std::cout << mission_system->getMission() << " mission set.\n";
                     break;
                 case MissionIMP::FollowMisTest:
                     std::cout << "FollowMisTest is not implemented yet.\n";

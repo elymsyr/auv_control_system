@@ -5,7 +5,7 @@ using namespace casadi;
 
 MotionSystem::MotionSystem(std::string name, int runtime, unsigned int system_code) 
     : Subsystem(name, runtime, system_code),
-      mpc("/home/eren/GitHub/Simulation/config.json", 40, 0.1),
+      mpc("../config.json", 40, 0.1),
       mission_sub_(mission_state, mission_mtx),
       env_sub_(env_state, env_mtx),
       x0(DM::vertcat({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})),
