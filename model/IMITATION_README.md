@@ -28,7 +28,7 @@ You can also generate data using the provided Docker image.
 **Example usage:**
 ```sh
 docker pull elymsyr/auv_control_data_generation
-docker run --gpus all -it elymsyr/auv_control_data_generation -s <steps_per_iteration> -p <num_iterations>
+docker run --gpus all -it elymsyr/auv_control_data_generation
 ```
 - `-h`: See help
 - `-s`: Number of steps in each iteration
@@ -36,7 +36,7 @@ docker run --gpus all -it elymsyr/auv_control_data_generation -s <steps_per_iter
 
 After the iterations are completed:
 ```sh
-docker cp elymsyr/auv_control_data_generation:app/build/data.h5 <file_path_host>/data.h5
+docker cp <container_id>:app/build/data.h5 <file_path_host>/data.h5
 ```
 
 ## Usage
