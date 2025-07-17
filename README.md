@@ -81,11 +81,34 @@ The system follows a component-based architecture where modules communicate thro
 2. Clone this repository:
     ```sh
     git clone https://github.com/yourusername/auv_control_system.git
-    cd auv_control_system/Control
+    cd auv_control_system
     ```
-3. Build using the provided [build.py](build.py) script or with CMake:
+3. Build with CMake:
     ```sh
-    python build.py
+    conda env create -f environment.yml
+    conda run -n mp_test bash -c " \
+      cd /app && \
+      rm -rf build && \
+      mkdir build && \
+      cd build && \
+      cmake -DBOOST_ROOT=\$CONDA_PREFIX \
+        -DCMAKE_CXX_COMPILER=\$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++ \
+        -DCMAKE_CUDA_HOST_COMPILER=\$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc \
+        -DCMAKE_PREFIX_PATH=\$CONDA_PREFIX \
+        -DCMAKE_BUILD_TYPE=Debug .. && \
+      make -j\$(nproc) \
+      "
+    ```
+
+4. See help and run:
+    ```sh
+    ./control_system -h
+    ```
+
+5. Use test ui to control system:
+    ```sh
+    pip install zmq
+    conda run -n mp_test bash -c "python ../connection/comm.py"
     ```
 
 ## Troubleshooting
