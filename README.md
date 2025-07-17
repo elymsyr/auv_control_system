@@ -10,6 +10,7 @@ This project includes only the applied last version of the main control system. 
 
 ## Docs
 
+- [Modular System](docs/MODULAR_README.md)
 - [Vehicle Dynamics](docs/DYNAMICS_README.md)
 - [Fossen Net](docs/IMITATION_README.md)
 
