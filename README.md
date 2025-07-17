@@ -77,10 +77,32 @@ The system follows a component-based architecture where modules communicate thro
 
 ## Building
 
+### Docker
+
+1. Pull and run container:
+    ```sh
+    docker pull elymsyr/control_system:latest
+    docker run --gpus all -it elymsyr/control_system -h
+    ```
+
+2. Clone this repository:
+    ```sh
+    git clone https://github.com/elymsyr/auv_control_system.git
+    cd auv_control_system
+    ```
+
+3. Use test UI to control the system:
+    ```sh
+    pip install zmq
+    python connection/comm.py
+    ```
+
+### CMake
+
 1. Install dependencies (CUDA, CasADi, nlohmann/json).
 2. Clone this repository:
     ```sh
-    git clone https://github.com/yourusername/auv_control_system.git
+    git clone https://github.com/elymsyr/auv_control_system.git
     cd auv_control_system
     ```
 3. Build with CMake:
@@ -105,7 +127,7 @@ The system follows a component-based architecture where modules communicate thro
     ./control_system -h
     ```
 
-5. Use test ui to control system:
+5. Use test UI to control the system:
     ```sh
     pip install zmq
     conda run -n mp_test bash -c "python ../connection/comm.py"
