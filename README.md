@@ -10,8 +10,8 @@ This project includes only the applied last version of the main control system. 
 
 ## Docs
 
-- [Dynamics](docs/DYNAMICS_README.md)
-- [FossenNN](docs/IMITATION_README.md)
+- [Vehicle Dynamics](docs/DYNAMICS_README.md)
+- [Fossen Net](docs/IMITATION_README.md)
 
 ## Features
 
