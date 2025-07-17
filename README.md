@@ -96,10 +96,6 @@ The system follows a component-based architecture where modules communicate thro
 ## License
 [GNU GENERAL PUBLIC LICENSE](LICENSE)
 
-## Development Process
-
-<iframe src="https://peridot-slash-ceb.notion.site/ebd/1d34a7fa163f8126b44fc97fc5dc5710" width="100%" height="600" frameborder="0" allowfullscreen />
-
 ## Security Notice
 
 **This project is under active development and is not production-ready.**  
