@@ -15,6 +15,8 @@ RUN curl -sLo ~/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-late
 ENV PATH="/opt/conda/bin:$PATH"
 
 # Initialize Conda
+RUN conda tos accept --override-channels -c https://repo.anaconda.com/pkgs/main
+RUN conda tos accept --override-channels -c https://repo.anaconda.com/pkgs/r
 RUN conda init bash
 
 COPY environment.yml .
