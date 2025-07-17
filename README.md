@@ -5,7 +5,7 @@ A modular, GPU-accelerated control system for Autonomous Underwater Vehicles (AU
 This project includes only the applied last version of the main control system. See other projects to reach all the AUV components:
 
 - [**Simulation Systems**](https://github.com/elymsyr/auv_simulation)
-- [**Vision Systems**](https://github.com/mehmetcullu/au_vision)
+- [**Vision Systems**](https://github.com/elymsyr/auv_vision)
 - **GUI Systems:** *will be added*
 
 ## Docs
