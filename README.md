@@ -96,6 +96,10 @@ The system follows a component-based architecture where modules communicate thro
 ## License
 [GNU GENERAL PUBLIC LICENSE](LICENSE)
 
+## Development Process
+
+[TR] Mayıs ayı ve öncesi için geliştirme sürecine bakmak için [Notion](https://peridot-slash-ceb.notion.site/Sualt-Arac-Yaz-l-m-Tak-m-1d34a7fa163f8126b44fc97fc5dc5710) sayfasını ziyaret edebilirsiniz.
+
 ## Security Notice
 
 **This project is under active development and is not production-ready.**  
