@@ -78,7 +78,9 @@ The system follows a component-based architecture where modules communicate thro
 
 ## Building
 
-### Docker
+### Docker 
+
+Recommended when the original GUI is used on local web.
 
 1. Pull and run container:
     ```sh
@@ -98,7 +100,9 @@ The system follows a component-based architecture where modules communicate thro
     python connection/comm.py
     ```
 
-### CMake
+### CMake 
+
+Recommended when the test UI is used on local.
 
 1. Install dependencies (CUDA, CasADi, nlohmann/json).
 2. Clone this repository:
