@@ -2,7 +2,7 @@
 
 This document outlines the implementation of the robot's kinematics and dynamics using the CasADi C++ interface.
 
-![Robot Model](docs/media/model.png)
+![Robot Model](media/model.png)
 
 ## Kinematics
 
@@ -10,7 +10,7 @@ The implementation leverages CasADi's symbolic capabilities to define the transf
 
 The kinematics are implemented in `src/control/vehicle_model.cpp` and exposed through a CasADi function.
 
-![Kinematics Diagram](docs/media/kinematics.png)
+![Kinematics Diagram](media/kinematics.png)
 
 ## Dynamics
 
@@ -18,7 +18,7 @@ The vehicle's dynamics are formulated using the Fossen method. CasADi is used to
 
 The dynamics are implemented in `src/control/vehicle_model.cpp` and exposed as a CasADi function for use in optimization problems.
 
-![Dynamics Diagram](docs/media/dynamics.png)
+![Dynamics Diagram](media/dynamics.png)
 
 # References
 
