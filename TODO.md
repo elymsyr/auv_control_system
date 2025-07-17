@@ -13,3 +13,4 @@
 - [x] Implement Mission Template and Mission System
 - [ ] Improve dynamic path generation
 - [ ] Improve dynamic path for Sonar Test Mission
+- [ ] Fix the control problem when the vehicle is too close to an obstacle

@@ -109,7 +109,7 @@ private:
                     function();
                     publish();
                     // Sleep with periodic wakeup checks
-                    std::this_thread::sleep_for(std::chrono::milliseconds(runtime));
+                    std::this_thread::sleep_until(start + runtime);
                     
                     lk.lock();
                 }

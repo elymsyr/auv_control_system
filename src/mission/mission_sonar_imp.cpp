@@ -54,7 +54,7 @@ float3* SonarMission::convert_obs_to_world(std::array<double, 12> state, double*
 
 void SonarMission::state_initial() {
     std::cout << "[SonarMission] INITIAL STATE\n";
-    ref = make_float2(20.0f, 16.0f);
+    ref = make_float2(28.0f, 32.0f);
     ref_depth = -1;
     state = 0;
 
