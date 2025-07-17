@@ -8,6 +8,11 @@ This project includes only the applied last version of the main control system. 
 - [**Vision Systems**](https://github.com/mehmetcullu/au_vision)
 - **GUI Systems:** *will be added*
 
+## Docs
+
+- [Dynamics](docs/DYNAMICS_README.md)
+- [FossenNN](docs/IMITATION_README.md)
+
 ## Features
 
 - **Non-Linear Model Predictive Control (NL-MPC)** using CasADi for advanced trajectory tracking and control.
