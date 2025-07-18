@@ -6,6 +6,7 @@ This repository contains only the latest version of the main control system. For
 
 - [**Simulation Systems**](https://github.com/elymsyr/auv_simulation)
 - [**Vision Systems**](https://github.com/elymsyr/auv_vision)
+- [**Control Models**](https://github.com/elymsyr/auv_control_model)
 - **GUI Systems:** *will be added*
 
 ---
@@ -14,7 +15,6 @@ This repository contains only the latest version of the main control system. For
 
 - [Modular System](docs/MODULAR_README.md)
 - [Vehicle Dynamics](docs/DYNAMICS_README.md)
-- [Fossen Net](docs/IMITATION_README.md)
 
 ---
 
