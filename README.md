@@ -8,7 +8,7 @@ This repository contains only the latest version of the main control system. For
 - [**Vision Systems**](https://github.com/elymsyr/auv_vision)
 - [**Control Models**](https://github.com/elymsyr/auv_control_model)
 - [**LLM Agent**](https://github.com/elymsyr/auv_llm_agent)
-- **GUI Systems:** *will be added*
+- [**User Interface**](https://github.com/Sannora/auv_User-Interface)
 
 ---
 
