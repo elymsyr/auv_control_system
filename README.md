@@ -35,15 +35,11 @@ This repository contains only the latest version of the main control system. For
 
 ## Requirements
 
-- **CUDA Toolkit** (11.x or 12.x recommended)
+- **CUDA Toolkit** (11.x or 12.x recommended, developed on 12.4.1)
 - **NVIDIA GPU** with compatible driver
 - **Conda**
 - **C++17** or newer
-- **CMake** (recommended for building)
-- **Python 3.8+** (for LLM Agent)
-- **PyTorch, scikit-learn, h5py, matplotlib, numpy** (for imitation learning and LLM Agent)
-- **ZeroMQ, Protobuf** (for communication)
-- **Hugging Face Token** (for LLM Agent API access)
+- **CMake**
 
 ---
 
