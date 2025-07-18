@@ -111,30 +111,6 @@ Recommended when the test UI is used on local.
 
 ---
 
-## Using the LLM Agent
-
-The LLM Agent module (`agent/llm_agent.py`) enables natural language mission planning and autonomous configuration generation.
-
-- **Status:**  
-  The LLM Agent integration is currently under development and not yet finalized. Features and API may change.
-
-- **Setup:**  
-  - Ensure you have a Hugging Face API token and set it as `HF_TOKEN` in your environment.
-  - Install Python dependencies:  
-    ```sh
-    pip install pydantic requests python-dotenv
-    ```
-- **Run the agent:**  
-  - See `agent/main.py` for example usage.
-  - The agent processes sensor data and user commands, returning a structured configuration for the vehicle.
-
----
-
-**Note:**  
-The LLM Agent is still in progress. Expect frequent updates and changes as development continues.
-
----
-
 ## Troubleshooting
 
 - **CUDA errors:** Ensure your GPU and driver are compatible with your CUDA toolkit version.
