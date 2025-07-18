@@ -107,14 +107,6 @@ Recommended when the test UI is used on local.
 
 ---
 
-## Troubleshooting
-
-- **CUDA errors:** Ensure your GPU and driver are compatible with your CUDA toolkit version.
-- **See [NVIDIA CUDA GPUs](https://developer.nvidia.com/cuda-gpus) for compatibility.**
-- **LLM Agent errors:** Check API token, network connectivity, and Python dependencies.
-
----
-
 ## License
 [GNU GENERAL PUBLIC LICENSE](LICENSE)
 
