@@ -1,0 +1,15 @@
+{
+  "target_sequence": [],
+  "electrical": {
+    "main_light": 70,
+    "uv_light": false,
+    "camera_mode": "video",
+    "sonar_active": true,
+    "sensor_package": "basic"
+  },
+  "transit_speed": 1.5,
+  "operation_mode": "transit",
+  "replan_conditions": [
+    "obstacle_detected"
+  ]
+}
