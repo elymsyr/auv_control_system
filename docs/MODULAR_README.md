@@ -6,6 +6,38 @@ This project implements a **fully modular, hot-swappable control system** for Au
 
 ---
 
+## Core Systems
+- **`main_system.h`**: Orchestrates system initialization and module coordination
+- **`subsystem.h`**: Base template for all modules (enables standardized communication)
+- **`communication_methods.h`**: Implements ZeroMQ-based pub/sub communication
+- **`topics.hpp`**: Defines standardized message formats (ROS-like)
+
+## Communication Architecture
+- **ZeroMQ Implementation**:
+  - TCP-based PUB/SUB pattern for inter-process communication
+  - Protobuf-serialized messages for efficient data transfer
+  - Configurable endpoints (e.g., `tcp://localhost:5555`)
+- **Message Handling**: Fast and customizable structure via templated pub/sub methods
+
+## Functional Modules
+- **Control System (`control_system.h`)**
+  - Interfaces with NLMPC controller (`nlmpc.h`)
+  - Implements vehicle dynamics models (`vehicle_model.h`)
+- **Environment System (`environment_system.h`)**
+  - Updates vehicle state
+- **Mission System (`mission_system.h`)**
+  - Executes mission profiles (`mission.h`)
+  - Supports specialized missions (e.g. `mission_sonar_imp.h`)
+- **Motion System (`motion_system.h`)**
+  - Integrates path planning with control outputs
+  - Manages actuator interfaces
+- **LLM Agent (`agent/llm_agent.py`)**
+  - Processes user commands and sensor data
+  - Generates high-level mission configurations using a Large Language Model (e.g., Hugging Face LLaMA)
+  - Can be integrated as a hot-swappable module for autonomous decision making
+
+---
+
 ## Modular Build & Hot-Swappable Modules
 
 ### Subsystem Design
@@ -100,10 +132,3 @@ Modules are registered and managed in [`main_system.cpp`](src/system/main_system
   - Use templated publisher/subscriber classes.
 - **Hot-swap modules:**  
   - Use system commands or direct API calls to start/stop/replace modules at runtime.
-
----
-
-## Summary
-
-- **Modular:** Each system component is independent and replaceable.
-- **Hot-swappable:** Modules can be managed

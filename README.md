@@ -1,18 +1,22 @@
 # ControlSystem
 
-A modular, GPU-accelerated control system for Autonomous Underwater Vehicles (AUVs). The system is implemented fully customizable and to work under mission and environment-free situations
+A modular, GPU-accelerated control system for Autonomous Underwater Vehicles (AUVs). The system is fully customizable and designed to operate in mission- and environment-agnostic scenarios.
 
-This project includes only the applied last version of the main control system. See other projects to reach all the AUV components:
+This repository contains only the latest version of the main control system. For other AUV components, see:
 
 - [**Simulation Systems**](https://github.com/elymsyr/auv_simulation)
 - [**Vision Systems**](https://github.com/elymsyr/auv_vision)
 - **GUI Systems:** *will be added*
+
+---
 
 ## Docs
 
 - [Modular System](docs/MODULAR_README.md)
 - [Vehicle Dynamics](docs/DYNAMICS_README.md)
 - [Fossen Net](docs/IMITATION_README.md)
+
+---
 
 ## Features
 
@@ -22,51 +26,11 @@ This project includes only the applied last version of the main control system. 
 - **GPU-accelerated A\*** path planning for efficient route computation.
 - **Fossen equations** for accurate marine vehicle dynamics modeling.
 - **Flexible vehicle model configuration** via JSON.
-- **Modular architecture** with custom templated components for rapid development
-- **Pub/Sub communication** ROS2 like communication
+- **Modular architecture** with custom templated components for rapid development.
+- **Pub/Sub communication**: ROS2-like communication using ZeroMQ.
+- **LLM Agent**: Integrate a Large Language Model agent for high-level mission planning and autonomous command interpretation.
 
-## Modular Structure
-
-The system follows a component-based architecture where modules communicate through ZeroMQ publisher/subscriber patterns. Key components:
-
-### Core Systems
-- **`main_system.h`**: Orchestrates system initialization and module coordination
-- **`subsystem.h`**: Base template for all modules (enables standardized communication)
-- **`communication_methods.h`**: Implements ZeroMQ-based pub/sub communication
-- **`topics.hpp`**: Defines standardized message formats (ROS-like)
-
-### Communication Architecture
-- **ZeroMQ Implementation**:
-  - TCP-based PUB/SUB pattern for inter-process communication
-  - Protobuf-serialized messages for efficient data transfer
-  - Configurable endpoints (e.g., `tcp://localhost:5555`)
-- **Message Handling**: Fast and customizable structure via templated pub/sub methods
-
-### Functional Modules
-- **Control System (`control_system.h`)**
-  - Interfaces with NLMPC controller (`nlmpc.h`)
-  - Implements vehicle dynamics models (`vehicle_model.h`)
-- **Environment System (`environment_system.h`)**
-  - Updates vehicle state
-- **Mission System (`mission_system.h`)**
-  - Executes mission profiles (`mission.h`)
-  - Supports specialized missions (e.g. `mission_sonar_imp.h`)
-- **Motion System (`motion_system.h`)**
-  - Integrates path planning with control outputs
-  - Manages actuator interfaces
-
-### Key Advantages
-1. **Realistic Vehicle Dynamics:** 6-DOF Fossen Equations implementation
-2. **Neural Network Implemented NL-MPC:** Faster iterations
-1. **Hot-swappable modules**: Components can be replaced at runtime
-2. **Template-based development**: 
-   ```cpp
-   // Example module declaration
-   class MissionSystem : public SubSystem<SonarTopic, ControlTopic> {...};
-   ```
-3. **Cross-component compatibility:** Standardized topics ensure interoperability
-4. **GPU-CPU hybrid processing:** Critical paths optimized with CUDA kernels
-
+---
 
 ## Requirements
 
@@ -75,6 +39,12 @@ The system follows a component-based architecture where modules communicate thro
 - **Conda**
 - **C++17** or newer
 - **CMake** (recommended for building)
+- **Python 3.8+** (for LLM Agent)
+- **PyTorch, scikit-learn, h5py, matplotlib, numpy** (for imitation learning and LLM Agent)
+- **ZeroMQ, Protobuf** (for communication)
+- **Hugging Face Token** (for LLM Agent API access)
+
+---
 
 ## Building
 
@@ -138,10 +108,39 @@ Recommended when the test UI is used on local.
     conda run -n mp_test bash -c "python ../connection/comm.py"
     ```
 
+---
+
+## Using the LLM Agent
+
+The LLM Agent module (`agent/llm_agent.py`) enables natural language mission planning and autonomous configuration generation.
+
+- **Status:**  
+  The LLM Agent integration is currently under development and not yet finalized. Features and API may change.
+
+- **Setup:**  
+  - Ensure you have a Hugging Face API token and set it as `HF_TOKEN` in your environment.
+  - Install Python dependencies:  
+    ```sh
+    pip install pydantic requests python-dotenv
+    ```
+- **Run the agent:**  
+  - See `agent/main.py` for example usage.
+  - The agent processes sensor data and user commands, returning a structured configuration for the vehicle.
+
+---
+
+**Note:**  
+The LLM Agent is still in progress. Expect frequent updates and changes as development continues.
+
+---
+
 ## Troubleshooting
 
-- **CUDA errors**: Ensure your GPU and driver are compatible with your CUDA toolkit version.
+- **CUDA errors:** Ensure your GPU and driver are compatible with your CUDA toolkit version.
 - **See [NVIDIA CUDA GPUs](https://developer.nvidia.com/cuda-gpus) for compatibility.**
+- **LLM Agent errors:** Check API token, network connectivity, and Python dependencies.
+
+---
 
 ## License
 [GNU GENERAL PUBLIC LICENSE](LICENSE)
