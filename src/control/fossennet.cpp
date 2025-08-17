@@ -1,5 +1,5 @@
 #include "control/fossennet.h"
-#include <torch/torch.h>
+#include <torch/script.h>
 #include "control/model_inference.h"
 #include <vector>
 #include <optional>

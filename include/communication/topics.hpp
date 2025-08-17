@@ -4,7 +4,8 @@
 #pragma once
 #include <cstring>
 #include <zmq.hpp>
-#include "external_libs.h"
+#include <casadi/casadi.hpp>
+
 struct TrajectoryPoint {
     std::array<double, 6> eta_desired;
     std::array<double, 6> nu_desired;

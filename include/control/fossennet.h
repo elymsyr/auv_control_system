@@ -1,13 +1,13 @@
 #ifndef NLMPC_H
 #define NLMPC_H
 
+#include "control/model_inference.h"
 #include <vector>
 #include <optional>
 #include <string>
 #include "mapping/config.h"
 #include <array>
 #include "communication/topics.hpp"
-#include "control/model_inference.h"
 
 class NonlinearMPC {
 public:

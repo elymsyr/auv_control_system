@@ -63,7 +63,7 @@ add_executable(control_system
 
 target_compile_definitions(control_system PRIVATE
     C10_USE_GLOG
-    GLOG_NO_ABBREVIATED_SEVERITIES
+    GLOG_STL_LOGGING_H_
 )
 
 # Include directories
@@ -79,7 +79,10 @@ endif()
 
 # ─── CUDA-specific compile options ─────────────────────────────────────────────
 # Enable separable compilation (useful for larger CUDA projects)
-set_target_properties(control_system PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+set_target_properties(control_system PROPERTIES
+  COMPILE_OPTIONS_CXX "-DGLOG_STL_LOGGING_H_"
+  COMPILE_OPTIONS_CUDA "-DGLOG_STL_LOGGING_H_"
+)
 
 # ─── Link Libraries ────────────────────────────────────────────────────────────
 target_link_libraries(control_system PRIVATE
@@ -98,6 +101,7 @@ target_link_libraries(control_system PRIVATE
 # ─── Optional: Arch-specific flags ─────────────────────────────────────────────
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
     target_compile_options(control_system PRIVATE 
+        -include ${CMAKE_SOURCE_DIR}/include/external_libs.h
         -march=armv8-a
         -mtune=cortex-a57
         -O3

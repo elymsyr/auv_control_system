@@ -1,34 +1,33 @@
 #ifndef VEHICLE_MODEL_H
 #define VEHICLE_MODEL_H
 
-#include "external_libs.h"
+#include <casadi/casadi.hpp>
 #include "communication/topics.hpp"
 #include <nlohmann/json.hpp>
 #include <vector>
 #include <optional>
 #include <string>
 
-using namespace casadi;
 using json = nlohmann::json;
 
 class VehicleModel {
 public:
     explicit VehicleModel(const std::string& config_path);
 
-    MX barrier_function_mx(const MX& x, const MX& y) const;
-    MX skew_symmetric(const MX& a) const;
-    MX transformation_matrix(const MX& eta) const;
-    MX coriolis_matrix(const MX& nu) const;
-    MX damping_matrix(const MX& nu) const;
-    MX restoring_forces(const MX& eta) const;
-    std::pair<MX, MX> dynamics(const MX& eta, const MX& nu, const MX& tau_p) const;
+    casadi::MX barrier_function_mx(const casadi::MX& x, const casadi::MX& y) const;
+    casadi::MX skew_symmetric(const casadi::MX& a) const;
+    casadi::MX transformation_matrix(const casadi::MX& eta) const;
+    casadi::MX coriolis_matrix(const casadi::MX& nu) const;
+    casadi::MX damping_matrix(const casadi::MX& nu) const;
+    casadi::MX restoring_forces(const casadi::MX& eta) const;
+    std::pair<casadi::MX, casadi::MX> dynamics(const casadi::MX& eta, const casadi::MX& nu, const casadi::MX& tau_p) const;
     std::array<double, 12> calculate_next_state(
         const EnvironmentTopic& current_state,
         const std::array<double, 8>& propeller_thrust, // Assuming 6 propellers for example
         double dt) const;
 
-    MX get_A_matrix() const;
-    MX get_M_inv() const;
+    casadi::MX get_A_matrix() const;
+    casadi::MX get_M_inv() const;
     double get_p_front_mid_max() const;
     double get_p_rear_max() const;
     bool has_map() const;
@@ -52,9 +51,9 @@ private:
     double W_, B_, W_minus_B_;
     int N;
 
-    MX r_g_, r_B_;
-    MX A_, M_, M_inv_, Ma_, Dl_, Dn_;
-    MX skew_m_, skew_I_, skew_A11_, skew_A22_;
+    casadi::MX r_g_, r_B_;
+    casadi::MX A_, M_, M_inv_, Ma_, Dl_, Dn_;
+    casadi::MX skew_m_, skew_I_, skew_A11_, skew_A22_;
 };
 
 #endif // VEHICLE_MODEL_H

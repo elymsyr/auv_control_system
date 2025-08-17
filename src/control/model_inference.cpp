@@ -1,7 +1,8 @@
 // model_inference.cpp
 #include "control/model_inference.h"
+#include <fstream>
 #include <iostream>
-#include <torch/torch.h>
+#include <torch/script.h>
 #include <stdexcept>
 #include <nlohmann/json.hpp>
 

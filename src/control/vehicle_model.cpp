@@ -1,4 +1,4 @@
-#include "external_libs.h"
+#include <torch/script.h>
 #include <nlohmann/json.hpp>
 #include <vector>
 #include <stdexcept>
@@ -7,7 +7,6 @@
 #include <string>
 #include "control/vehicle_model.h"
 
-using namespace casadi;
 using json = nlohmann::json;
 
 VehicleModel::VehicleModel(const std::string& config_path) {
@@ -15,68 +14,68 @@ VehicleModel::VehicleModel(const std::string& config_path) {
     calculate_linear();
 }
 
-// Now working with MX instead of DM.
-MX VehicleModel::skew_symmetric(const MX& a) const {
-    return MX::vertcat({
-        MX::horzcat({0, -a(2), a(1)}),
-        MX::horzcat({a(2), 0, -a(0)}),
-        MX::horzcat({-a(1), a(0), 0})
+// Now working with casadi::MX instead of DM.
+casadi::MX VehicleModel::skew_symmetric(const casadi::MX& a) const {
+    return casadi::MX::vertcat({
+        casadi::MX::horzcat({0, -a(2), a(1)}),
+        casadi::MX::horzcat({a(2), 0, -a(0)}),
+        casadi::MX::horzcat({-a(1), a(0), 0})
     });
 }
 
-MX VehicleModel::transformation_matrix(const MX& eta) const {
-    MX phi   = eta(3);
-    MX theta = eta(4);
-    MX psi   = eta(5);
+casadi::MX VehicleModel::transformation_matrix(const casadi::MX& eta) const {
+    casadi::MX phi   = eta(3);
+    casadi::MX theta = eta(4);
+    casadi::MX psi   = eta(5);
     
-    MX R = MX::vertcat({
-        MX::horzcat({cos(psi)*cos(theta), 
+    casadi::MX R = casadi::MX::vertcat({
+        casadi::MX::horzcat({cos(psi)*cos(theta), 
                         -sin(psi)*cos(phi) + cos(psi)*sin(theta)*sin(phi), 
                         sin(psi)*sin(phi) + cos(psi)*cos(phi)*sin(theta)}),
-        MX::horzcat({sin(psi)*cos(theta), 
+        casadi::MX::horzcat({sin(psi)*cos(theta), 
                         cos(psi)*cos(phi) + sin(psi)*sin(theta)*sin(phi), 
                         -cos(psi)*sin(phi) + sin(psi)*sin(theta)*cos(phi)}),
-        MX::horzcat({-sin(theta), cos(theta)*sin(phi), cos(theta)*cos(phi)})
+        casadi::MX::horzcat({-sin(theta), cos(theta)*sin(phi), cos(theta)*cos(phi)})
     });
     
-    MX T = MX::vertcat({
-        MX::horzcat({1, sin(phi)*tan(theta), cos(phi)*tan(theta)}),
-        MX::horzcat({0, cos(phi), -sin(phi)}),
-        MX::horzcat({0, sin(phi)/cos(theta), cos(phi)/cos(theta)})
+    casadi::MX T = casadi::MX::vertcat({
+        casadi::MX::horzcat({1, sin(phi)*tan(theta), cos(phi)*tan(theta)}),
+        casadi::MX::horzcat({0, cos(phi), -sin(phi)}),
+        casadi::MX::horzcat({0, sin(phi)/cos(theta), cos(phi)/cos(theta)})
     });
     
-    return MX::blockcat({{R, MX::zeros(3,3)}, {MX::zeros(3,3), T}});
+    return casadi::MX::blockcat({{R, casadi::MX::zeros(3,3)}, {casadi::MX::zeros(3,3), T}});
 }
 
-MX VehicleModel::coriolis_matrix(const MX& nu) const {
-    MX nu1 = nu(Slice(0, 3));
-    MX nu2 = nu(Slice(3, 6));
-    MX skew_nu1 = skew_symmetric(nu1);
-    MX skew_nu2 = skew_symmetric(nu2);
+casadi::MX VehicleModel::coriolis_matrix(const casadi::MX& nu) const {
+    casadi::MX nu1 = nu(Slice(0, 3));
+    casadi::MX nu2 = nu(Slice(3, 6));
+    casadi::MX skew_nu1 = skew_symmetric(nu1);
+    casadi::MX skew_nu2 = skew_symmetric(nu2);
     
-    MX Crb_top = MX::horzcat({MX::zeros(3,3), -mass_ * skew_nu1 - mtimes(skew_nu2, skew_m_)});
-    MX Crb_bottom = MX::horzcat({-mass_ * skew_nu1 + mtimes(skew_nu2, skew_m_), -mtimes(skew_nu2, skew_I_)});
-    MX Crb = MX::vertcat({Crb_top, Crb_bottom});
+    casadi::MX Crb_top = casadi::MX::horzcat({casadi::MX::zeros(3,3), -mass_ * skew_nu1 - mtimes(skew_nu2, skew_m_)});
+    casadi::MX Crb_bottom = casadi::MX::horzcat({-mass_ * skew_nu1 + mtimes(skew_nu2, skew_m_), -mtimes(skew_nu2, skew_I_)});
+    casadi::MX Crb = casadi::MX::vertcat({Crb_top, Crb_bottom});
     
-    MX Ca_top = MX::horzcat({MX::zeros(3,3), -mtimes(skew_A11_, skew_nu1)});
-    MX Ca_bottom = MX::horzcat({-mtimes(skew_A11_, skew_nu1), -mtimes(skew_A22_, skew_nu2)});
-    MX Ca = MX::vertcat({Ca_top, Ca_bottom});
+    casadi::MX Ca_top = casadi::MX::horzcat({casadi::MX::zeros(3,3), -mtimes(skew_A11_, skew_nu1)});
+    casadi::MX Ca_bottom = casadi::MX::horzcat({-mtimes(skew_A11_, skew_nu1), -mtimes(skew_A22_, skew_nu2)});
+    casadi::MX Ca = casadi::MX::vertcat({Ca_top, Ca_bottom});
     
     return simplify(Crb + Ca);
 }
 
-MX VehicleModel::damping_matrix(const MX& nu) const {
+casadi::MX VehicleModel::damping_matrix(const casadi::MX& nu) const {
     Sparsity diag6_sp = Sparsity::diag(6);
-    MX Dn = MX::zeros(diag6_sp);
+    casadi::MX Dn = casadi::MX::zeros(diag6_sp);
     for(int i=0; i<6; ++i) Dn(i,i) = fabs(nu(i)) * Dn_(i,i);
     return Dl_ + Dn;
 }
 
-MX VehicleModel::restoring_forces(const MX& eta) const {
-    MX phi   = eta(3);
-    MX theta = eta(4);
+casadi::MX VehicleModel::restoring_forces(const casadi::MX& eta) const {
+    casadi::MX phi   = eta(3);
+    casadi::MX theta = eta(4);
     
-    MX g_eta = MX::vertcat({
+    casadi::MX g_eta = casadi::MX::vertcat({
         W_minus_B_ * sin(theta),
         -W_minus_B_ * cos(theta) * sin(phi),
         -W_minus_B_ * cos(theta) * cos(phi),
@@ -87,22 +86,22 @@ MX VehicleModel::restoring_forces(const MX& eta) const {
     return g_eta;
 }
 
-std::pair<MX, MX> VehicleModel::dynamics(const MX& eta, const MX& nu, const MX& tau_p) const {
-    MX J_eta   = transformation_matrix(eta);
-    MX eta_dot = mtimes(J_eta, nu);
+std::pair<casadi::MX, casadi::MX> VehicleModel::dynamics(const casadi::MX& eta, const casadi::MX& nu, const casadi::MX& tau_p) const {
+    casadi::MX J_eta   = transformation_matrix(eta);
+    casadi::MX eta_dot = mtimes(J_eta, nu);
     
-    MX C      = coriolis_matrix(nu);
-    MX D      = damping_matrix(nu);
-    MX g      = restoring_forces(eta);
+    casadi::MX C      = coriolis_matrix(nu);
+    casadi::MX D      = damping_matrix(nu);
+    casadi::MX g      = restoring_forces(eta);
     
-    MX tau    = mtimes(A_, tau_p);
-    MX nu_dot = simplify(mtimes(M_inv_, tau - mtimes(C, nu) - mtimes(D, nu) - g));
+    casadi::MX tau    = mtimes(A_, tau_p);
+    casadi::MX nu_dot = simplify(mtimes(M_inv_, tau - mtimes(C, nu) - mtimes(D, nu) - g));
     
     return {eta_dot, nu_dot};
 }
 
-MX VehicleModel::get_A_matrix() const { return A_; }
-MX VehicleModel::get_M_inv() const { return M_inv_; }
+casadi::MX VehicleModel::get_A_matrix() const { return A_; }
+casadi::MX VehicleModel::get_M_inv() const { return M_inv_; }
 double VehicleModel::get_p_front_mid_max() const { return p_front_mid_max_; }
 double VehicleModel::get_p_rear_max() const { return p_rear_max_; }
 
@@ -139,14 +138,14 @@ void VehicleModel::load_config(const std::string& path) {
     r_x_ = com["X"].get<double>();
     r_y_ = com["Y"].get<double>();
     r_z_ = com["Z"].get<double>();
-    r_g_ = MX::vertcat({r_x_, r_y_, r_z_});
+    r_g_ = casadi::MX::vertcat({r_x_, r_y_, r_z_});
 
     // Center of buoyancy
     auto buoyancy = config["center_of_buoancy"];
     x_B_ = buoyancy["X"].get<double>();
     y_B_ = buoyancy["Y"].get<double>();
     z_B_ = buoyancy["Z"].get<double>();
-    r_B_ = MX::vertcat({x_B_, y_B_, z_B_});
+    r_B_ = casadi::MX::vertcat({x_B_, y_B_, z_B_});
 
     // Dimensions
     auto dim = config["dimensions"];
@@ -207,28 +206,28 @@ void VehicleModel::load_config(const std::string& path) {
 }
 
 void VehicleModel::calculate_linear() {
-    // Use MX for symbolic matrices. (Note: constants are automatically converted.)
+    // Use casadi::MX for symbolic matrices. (Note: constants are automatically converted.)
     Sparsity diag_sp = Sparsity::diag(3);
-    MX A11 = MX::zeros(diag_sp);
+    casadi::MX A11 = casadi::MX::zeros(diag_sp);
     A11(0,0) = C_X_;
     A11(1,1) = C_Y_;
     A11(2,2) = C_Z_;
 
     Sparsity sp_A12(3, 3, {0,0,1,2}, {2,1}, true);  // True for column-compressed
-    MX A12 = MX::zeros(sp_A12);
+    casadi::MX A12 = casadi::MX::zeros(sp_A12);
     A12(1,2) = C_Z_q_;
     A12(2,1) = C_Y_r_;
 
-    MX A21 = A12.T();
+    casadi::MX A21 = A12.T();
 
-    MX A22 = MX::diag(MX::vertcat({MX(C_K_), MX(C_M_), MX(C_N_)}));
+    casadi::MX A22 = casadi::MX::diag(casadi::MX::vertcat({casadi::MX(C_K_), casadi::MX(C_M_), casadi::MX(C_N_)}));
     
-    Ma_ = MX::vertcat({MX::horzcat({A11, A12}), MX::horzcat({A21, A22})});
+    Ma_ = casadi::MX::vertcat({casadi::MX::horzcat({A11, A12}), casadi::MX::horzcat({A21, A22})});
     
-    MX I = MX::vertcat({
-        MX::horzcat({MX(Lxx_), -MX(Lxy_), -MX(Lxz_)}),
-        MX::horzcat({-MX(Lyx_), MX(Lyy_), -MX(Lyz_)}),
-        MX::horzcat({-MX(Lzx_), -MX(Lzy_), MX(Lzz_)})
+    casadi::MX I = casadi::MX::vertcat({
+        casadi::MX::horzcat({casadi::MX(Lxx_), -casadi::MX(Lxy_), -casadi::MX(Lxz_)}),
+        casadi::MX::horzcat({-casadi::MX(Lyx_), casadi::MX(Lyy_), -casadi::MX(Lyz_)}),
+        casadi::MX::horzcat({-casadi::MX(Lzx_), -casadi::MX(Lzy_), casadi::MX(Lzz_)})
     });
     
     skew_m_   = mass_ * skew_symmetric(r_g_);
@@ -236,29 +235,29 @@ void VehicleModel::calculate_linear() {
     skew_A22_ = mass_ * skew_symmetric(A22);
     skew_I_   = skew_symmetric(I);
     
-    MX Mrb_top    = MX::horzcat({mass_ * MX::eye(3), -skew_m_});
-    MX Mrb_bottom = MX::horzcat({skew_m_, I});
-    MX Mrb = MX::vertcat({Mrb_top, Mrb_bottom});
+    casadi::MX Mrb_top    = casadi::MX::horzcat({mass_ * casadi::MX::eye(3), -skew_m_});
+    casadi::MX Mrb_bottom = casadi::MX::horzcat({skew_m_, I});
+    casadi::MX Mrb = casadi::MX::vertcat({Mrb_top, Mrb_bottom});
     
     M_ = Mrb + Ma_;
 
     // Use solve to get the inverse symbolically
-    M_inv_ = simplify(MX::inv(M_));
+    M_inv_ = simplify(casadi::MX::inv(M_));
     
-    MX Dl_lin = MX::diag(MX::vertcat({MX(D_u_), MX(D_v_), MX(D_w_)}));
-    MX Dl_ang = MX::diag(MX::vertcat({MX(D_p_), MX(D_q_), MX(D_r_)}));
-    Dl_ = MX::blockcat({{Dl_lin, MX::zeros(3,3)}, {MX::zeros(3,3), Dl_ang}});
+    casadi::MX Dl_lin = casadi::MX::diag(casadi::MX::vertcat({casadi::MX(D_u_), casadi::MX(D_v_), casadi::MX(D_w_)}));
+    casadi::MX Dl_ang = casadi::MX::diag(casadi::MX::vertcat({casadi::MX(D_p_), casadi::MX(D_q_), casadi::MX(D_r_)}));
+    Dl_ = casadi::MX::blockcat({{Dl_lin, casadi::MX::zeros(3,3)}, {casadi::MX::zeros(3,3), Dl_ang}});
     
-    MX Dn_ang = MX::diag(MX::vertcat({MX(Dn_p_), MX(Dn_q_), MX(Dn_r_)}));
-    MX Dn_lin = MX::diag(MX::vertcat({MX(Dn_u_), MX(Dn_v_), MX(Dn_w_)}));
-    Dn_ = MX::blockcat({{Dn_lin, MX::zeros(3,3)}, {MX::zeros(3,3), Dn_ang}});
+    casadi::MX Dn_ang = casadi::MX::diag(casadi::MX::vertcat({casadi::MX(Dn_p_), casadi::MX(Dn_q_), casadi::MX(Dn_r_)}));
+    casadi::MX Dn_lin = casadi::MX::diag(casadi::MX::vertcat({casadi::MX(Dn_u_), casadi::MX(Dn_v_), casadi::MX(Dn_w_)}));
+    Dn_ = casadi::MX::blockcat({{Dn_lin, casadi::MX::zeros(3,3)}, {casadi::MX::zeros(3,3), Dn_ang}});
     
-    A_ = MX::vertcat({
-        MX::horzcat({1, 1, cos(a_), cos(a_), 0, 0, 0, 0}),
-        MX::horzcat({0, 0, sin(a_), sin(a_), 0, 0, 0, 0}),
-        MX::horzcat({0, 0, 0, 0, 1, 1, 1, 1}),
-        MX::horzcat({0, 0, 0, 0, lm_, -lm_, lm_, -lm_}),
-        MX::horzcat({0, 0, 0, 0, rf_, rf_, -rf_, -rf_}),
-        MX::horzcat({-wf_, wf_, -lr_*sin(a_), lr_*sin(a_), 0, 0, 0, 0})
+    A_ = casadi::MX::vertcat({
+        casadi::MX::horzcat({1, 1, cos(a_), cos(a_), 0, 0, 0, 0}),
+        casadi::MX::horzcat({0, 0, sin(a_), sin(a_), 0, 0, 0, 0}),
+        casadi::MX::horzcat({0, 0, 0, 0, 1, 1, 1, 1}),
+        casadi::MX::horzcat({0, 0, 0, 0, lm_, -lm_, lm_, -lm_}),
+        casadi::MX::horzcat({0, 0, 0, 0, rf_, rf_, -rf_, -rf_}),
+        casadi::MX::horzcat({-wf_, wf_, -lr_*sin(a_), lr_*sin(a_), 0, 0, 0, 0})
     });
 }
