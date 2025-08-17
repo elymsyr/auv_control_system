@@ -1,7 +1,7 @@
 #ifndef MODEL_INFERENCE_H
 #define MODEL_INFERENCE_H
 
-#include <torch/script.h>
+#include "external_libs.h"
 #include <vector>
 #include <string>
 

@@ -17,3 +17,4 @@ cmake -DCMAKE_PREFIX_PATH=${CONDA_PREFIX} \
 
 # 5. Compile your project
 make -j$(nproc)
+./control_system

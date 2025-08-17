@@ -80,5 +80,9 @@ std::array<double, 8> NonlinearMPC::solve(const EnvironmentTopic& local_env, con
         }
     }
 
+    for (size_t i = 0; i < control_input.size(); ++i) {
+        control_input[i] = std::clamp(control_input[i], -30.0, 30.0);
+    }
+
     return control_input;
 }

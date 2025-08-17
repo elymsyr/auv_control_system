@@ -1,224 +1,264 @@
-#include "control/vehicle_model.h"
+#include "external_libs.h"
+#include <nlohmann/json.hpp>
+#include <vector>
+#include <stdexcept>
 #include <iostream>
 #include <fstream>
-#include <cmath>
+#include <string>
+#include "control/vehicle_model.h"
 
+using namespace casadi;
 using json = nlohmann::json;
 
 VehicleModel::VehicleModel(const std::string& config_path) {
     load_config(config_path);
-    build_matrices();
-    std::cout << "VehicleModel initialized successfully from " << config_path << std::endl;
+    calculate_linear();
 }
 
-void VehicleModel::load_config(const std::string& path) {
-    std::ifstream f(path);
-    if (!f.is_open()) {
-        throw std::runtime_error("Could not open config file: " + path);
-    }
-    this->config_json_ = json::parse(f);
-    json config = this->config_json_["assembly_mass_properties"];
-
-    mass_ = config["mass"]["value"].get<double>();
-    g_ = config["dynamics"]["g"]["value"].get<double>();
-    double fluid_density = config["dynamics"]["fluid_density"]["value"].get<double>();
-    double displaced_volume = config["dynamics"]["displaced_volume"]["value"].get<double>();
-    W_ = mass_ * g_;
-    B_ = fluid_density * displaced_volume * g_;
-    W_minus_B_ = W_ - B_;
-
-    r_g_ << config["center_of_mass"]["X"].get<double>(),
-            config["center_of_mass"]["Y"].get<double>(),
-            config["center_of_mass"]["Z"].get<double>();
-            
-    r_B_ << config["center_of_buoancy"]["X"].get<double>(),
-            config["center_of_buoancy"]["Y"].get<double>(),
-            config["center_of_buoancy"]["Z"].get<double>();
-
-    auto moments_com = config["moments_of_inertia_about_center_of_mass"];
-    I_cg_ << moments_com["Lxx"].get<double>(), -moments_com["Lxy"].get<double>(), -moments_com["Lxz"].get<double>(),
-            -moments_com["Lyx"].get<double>(),  moments_com["Lyy"].get<double>(), -moments_com["Lyz"].get<double>(),
-            -moments_com["Lzx"].get<double>(), -moments_com["Lzy"].get<double>(),  moments_com["Lzz"].get<double>();
-
-    auto damping = config["dynamics"]["damping"];
-    D_l_ = Matrix6d::Zero();
-    D_l_(0, 0) = damping["linear"]["D_u"].get<double>();
-    D_l_(1, 1) = damping["linear"]["D_v"].get<double>();
-    D_l_(2, 2) = damping["linear"]["D_w"].get<double>();
-    D_l_(3, 3) = damping["angular"]["D_p"].get<double>();
-    D_l_(4, 4) = damping["angular"]["D_q"].get<double>();
-    D_l_(5, 5) = damping["angular"]["D_r"].get<double>();
-    
-    D_n_ = Matrix6d::Zero();
-    D_n_(0, 0) = damping["linear_n"]["Dn_u"].get<double>();
-    D_n_(1, 1) = damping["linear_n"]["Dn_v"].get<double>();
-    D_n_(2, 2) = damping["linear_n"]["Dn_w"].get<double>();
-    D_n_(3, 3) = damping["angular_n"]["Dn_p"].get<double>();
-    D_n_(4, 4) = damping["angular_n"]["Dn_q"].get<double>();
-    D_n_(5, 5) = damping["angular_n"]["Dn_r"].get<double>();
-
-    auto dim = config["dimensions"];
-    double lm = dim["lm"].get<double>();
-    double wf = dim["wf"].get<double>();
-    double lr = dim["lr"].get<double>();
-    double rf = dim["rf"].get<double>();
-    double a_rad = config["rear_propeller_angle"]["value"].get<double>() * M_PI / 180.0;
-    
-    A_thruster_alloc_ << 1, 1, cos(a_rad),  cos(a_rad), 0,    0,    0,    0,
-                         0, 0, sin(a_rad),  sin(a_rad), 0,    0,    0,    0,
-                         0, 0, 0,           0,          1,    1,    1,    1,
-                         0, 0, 0,           0,          lm,  -lm,   lm,  -lm,
-                         0, 0, 0,           0,          rf,   rf,  -rf,  -rf,
-                         -wf, wf, -lr*sin(a_rad), lr*sin(a_rad), 0, 0, 0, 0;
+// Now working with MX instead of DM.
+MX VehicleModel::skew_symmetric(const MX& a) const {
+    return MX::vertcat({
+        MX::horzcat({0, -a(2), a(1)}),
+        MX::horzcat({a(2), 0, -a(0)}),
+        MX::horzcat({-a(1), a(0), 0})
+    });
 }
 
-void VehicleModel::build_matrices() {
-    Matrix6d M_rb = Matrix6d::Zero();
-    M_rb.block<3, 3>(0, 0) = mass_ * Eigen::Matrix3d::Identity();
-    M_rb.block<3, 3>(0, 3) = -mass_ * skew_symmetric(r_g_);
-    M_rb.block<3, 3>(3, 0) =  mass_ * skew_symmetric(r_g_);
-    M_rb.block<3, 3>(3, 3) = I_cg_;
-
-    json C = this->config_json_["assembly_mass_properties"]["added_mass"];
+MX VehicleModel::transformation_matrix(const MX& eta) const {
+    MX phi   = eta(3);
+    MX theta = eta(4);
+    MX psi   = eta(5);
     
-    Eigen::Matrix3d A11 = Eigen::Matrix3d::Zero();
-    A11(0,0) = -C["C_X"].get<double>();
-    A11(1,1) = -C["C_Y"].get<double>();
-    A11(2,2) = -C["C_Z"].get<double>();
+    MX R = MX::vertcat({
+        MX::horzcat({cos(psi)*cos(theta), 
+                        -sin(psi)*cos(phi) + cos(psi)*sin(theta)*sin(phi), 
+                        sin(psi)*sin(phi) + cos(psi)*cos(phi)*sin(theta)}),
+        MX::horzcat({sin(psi)*cos(theta), 
+                        cos(psi)*cos(phi) + sin(psi)*sin(theta)*sin(phi), 
+                        -cos(psi)*sin(phi) + sin(psi)*sin(theta)*cos(phi)}),
+        MX::horzcat({-sin(theta), cos(theta)*sin(phi), cos(theta)*cos(phi)})
+    });
     
-    Eigen::Matrix3d A12 = Eigen::Matrix3d::Zero();
-    A12(1,2) = -C["C_Z_q"].get<double>();
-    A12(2,1) = -C["C_Y_r"].get<double>();
-
-    Eigen::Matrix3d A21 = A12.transpose();
+    MX T = MX::vertcat({
+        MX::horzcat({1, sin(phi)*tan(theta), cos(phi)*tan(theta)}),
+        MX::horzcat({0, cos(phi), -sin(phi)}),
+        MX::horzcat({0, sin(phi)/cos(theta), cos(phi)/cos(theta)})
+    });
     
-    Eigen::Matrix3d A22 = Eigen::Matrix3d::Zero();
-    A22(0,0) = -C["C_K"].get<double>();
-    A22(1,1) = -C["C_M"].get<double>();
-    A22(2,2) = -C["C_N"].get<double>();
-    
-    Matrix6d M_a = Matrix6d::Zero();
-    M_a.block<3,3>(0,0) = A11;
-    M_a.block<3,3>(0,3) = A12;
-    M_a.block<3,3>(3,0) = A21;
-    M_a.block<3,3>(3,3) = A22;
-
-    Matrix6d M_total = M_rb + M_a;
-    M_inv_ = M_total.inverse();
-
-    // Store these for the Coriolis calculation
-    A11_added_mass_ = A11;
-    A22_added_mass_ = A22;
+    return MX::blockcat({{R, MX::zeros(3,3)}, {MX::zeros(3,3), T}});
 }
 
-std::pair<Vector6d, Vector6d> VehicleModel::dynamics(const Vector6d& eta, const Vector6d& nu, const Eigen::Vector<double, 8>& tau_p) const {
-    Vector6d tau = A_thruster_alloc_ * tau_p;
-    Matrix6d J = transformation_matrix(eta);
-    Matrix6d C = coriolis_matrix(nu);
-    Matrix6d D = damping_matrix(nu);
-    Vector6d g = restoring_forces(eta);
-    Vector6d eta_dot = J * nu;
-    Vector6d nu_dot = M_inv_ * (tau - C * nu - D * nu - g);
+MX VehicleModel::coriolis_matrix(const MX& nu) const {
+    MX nu1 = nu(Slice(0, 3));
+    MX nu2 = nu(Slice(3, 6));
+    MX skew_nu1 = skew_symmetric(nu1);
+    MX skew_nu2 = skew_symmetric(nu2);
+    
+    MX Crb_top = MX::horzcat({MX::zeros(3,3), -mass_ * skew_nu1 - mtimes(skew_nu2, skew_m_)});
+    MX Crb_bottom = MX::horzcat({-mass_ * skew_nu1 + mtimes(skew_nu2, skew_m_), -mtimes(skew_nu2, skew_I_)});
+    MX Crb = MX::vertcat({Crb_top, Crb_bottom});
+    
+    MX Ca_top = MX::horzcat({MX::zeros(3,3), -mtimes(skew_A11_, skew_nu1)});
+    MX Ca_bottom = MX::horzcat({-mtimes(skew_A11_, skew_nu1), -mtimes(skew_A22_, skew_nu2)});
+    MX Ca = MX::vertcat({Ca_top, Ca_bottom});
+    
+    return simplify(Crb + Ca);
+}
+
+MX VehicleModel::damping_matrix(const MX& nu) const {
+    Sparsity diag6_sp = Sparsity::diag(6);
+    MX Dn = MX::zeros(diag6_sp);
+    for(int i=0; i<6; ++i) Dn(i,i) = fabs(nu(i)) * Dn_(i,i);
+    return Dl_ + Dn;
+}
+
+MX VehicleModel::restoring_forces(const MX& eta) const {
+    MX phi   = eta(3);
+    MX theta = eta(4);
+    
+    MX g_eta = MX::vertcat({
+        W_minus_B_ * sin(theta),
+        -W_minus_B_ * cos(theta) * sin(phi),
+        -W_minus_B_ * cos(theta) * cos(phi),
+        -(r_y_ * W_ - y_B_ * B_) * cos(theta)*cos(phi) + (r_z_ * W_ - z_B_ * B_) * cos(theta)*sin(phi),
+        (r_z_ * W_ - z_B_ * B_) * sin(theta) + (r_x_ * W_ - x_B_ * B_) * cos(theta)*cos(phi),
+        -(r_x_ * W_ - x_B_ * B_) * cos(theta)*sin(phi) - (r_y_ * W_ - y_B_ * B_) * sin(theta)
+    });
+    return g_eta;
+}
+
+std::pair<MX, MX> VehicleModel::dynamics(const MX& eta, const MX& nu, const MX& tau_p) const {
+    MX J_eta   = transformation_matrix(eta);
+    MX eta_dot = mtimes(J_eta, nu);
+    
+    MX C      = coriolis_matrix(nu);
+    MX D      = damping_matrix(nu);
+    MX g      = restoring_forces(eta);
+    
+    MX tau    = mtimes(A_, tau_p);
+    MX nu_dot = simplify(mtimes(M_inv_, tau - mtimes(C, nu) - mtimes(D, nu) - g));
+    
     return {eta_dot, nu_dot};
 }
 
-std::array<double, 12> VehicleModel::calculate_next_state(
-    const EnvironmentTopic& current_state,
-    const std::array<double, 8>& tau_p,
-    double dt) const
-{
-    // 1. Convert current state from std::array to Eigen::Vector
-    Vector6d eta_current, nu_current;
-    Vector8d tau_p_eigen; // Or Eigen::Vector<double, 8>
+MX VehicleModel::get_A_matrix() const { return A_; }
+MX VehicleModel::get_M_inv() const { return M_inv_; }
+double VehicleModel::get_p_front_mid_max() const { return p_front_mid_max_; }
+double VehicleModel::get_p_rear_max() const { return p_rear_max_; }
 
-    // --- FIX IS HERE ---
-    // Use pointer-based access for C-style arrays instead of .begin()/.end()
-    std::copy(current_state.eta, current_state.eta + 6, eta_current.data());
-    std::copy(current_state.nu, current_state.nu + 6, nu_current.data());
-    // --- END OF FIX ---
+void VehicleModel::load_config(const std::string& path) {
+    std::ifstream f(path);
+    json config = json::parse(f)["assembly_mass_properties"];
+
+    // Load inertia parameters
+    auto moments = config["moments_of_inertia_about_output_coordinate_system"];
+    Ixx_ = moments["Ixx"].get<double>();
+    Ixy_ = moments["Ixy"].get<double>();
+    Ixz_ = moments["Ixz"].get<double>();
+    Iyx_ = moments["Iyx"].get<double>();
+    Iyy_ = moments["Iyy"].get<double>();
+    Iyz_ = moments["Iyz"].get<double>();
+    Izx_ = moments["Izx"].get<double>();
+    Izzy_ = moments["Izy"].get<double>();
+    Izz_ = moments["Izz"].get<double>();
+
+    // Load COM inertia
+    auto moments_com = config["moments_of_inertia_about_center_of_mass"];
+    Lxx_ = moments_com["Lxx"].get<double>();
+    Lxy_ = moments_com["Lxy"].get<double>();
+    Lxz_ = moments_com["Lxz"].get<double>();
+    Lyx_ = moments_com["Lyx"].get<double>();
+    Lyy_ = moments_com["Lyy"].get<double>();
+    Lyz_ = moments_com["Lyz"].get<double>();
+    Lzx_ = moments_com["Lzx"].get<double>();
+    Lzy_ = moments_com["Lzy"].get<double>();
+    Lzz_ = moments_com["Lzz"].get<double>();
+
+    // Load center of mass
+    auto com = config["center_of_mass"];
+    r_x_ = com["X"].get<double>();
+    r_y_ = com["Y"].get<double>();
+    r_z_ = com["Z"].get<double>();
+    r_g_ = MX::vertcat({r_x_, r_y_, r_z_});
+
+    // Center of buoyancy
+    auto buoyancy = config["center_of_buoancy"];
+    x_B_ = buoyancy["X"].get<double>();
+    y_B_ = buoyancy["Y"].get<double>();
+    z_B_ = buoyancy["Z"].get<double>();
+    r_B_ = MX::vertcat({x_B_, y_B_, z_B_});
+
+    // Dimensions
+    auto dim = config["dimensions"];
+    w_ = dim["width"].get<double>();
+    h_ = dim["height"].get<double>();
+    l_ = dim["length"].get<double>();
+    lm_ = dim["lm"].get<double>();
+    wf_ = dim["wf"].get<double>();
+    lr_ = dim["lr"].get<double>();
+    rf_ = dim["rf"].get<double>();
+
+    // Mass and parameters
+    mass_ = config["mass"]["value"].get<double>();
+    double a_deg = config["rear_propeller_angle"]["value"].get<double>();
+    a_ = a_deg * M_PI / 180.0;
+    volume_ = config["volume"]["value"].get<double>();
+
+    C_X_ = config["added_mass"]["C_X"].get<double>();
+    C_Y_ = config["added_mass"]["C_Y"].get<double>();
+    C_Z_ = config["added_mass"]["C_Z"].get<double>();
+    C_Y_r_ = config["added_mass"]["C_Y_r"].get<double>();
+    C_Z_q_ = config["added_mass"]["C_Z_q"].get<double>();
+    C_K_ = config["added_mass"]["C_K"].get<double>();
+    C_M_ = config["added_mass"]["C_M"].get<double>();
+    C_N_ = config["added_mass"]["C_N"].get<double>();
+
+    // Dynamics parameters
+    auto dynamics = config["dynamics"];
+    fluid_density_ = dynamics["fluid_density"]["value"].get<double>();
+    displaced_volume_ = dynamics["displaced_volume"]["value"].get<double>();
+    g_ = dynamics["g"]["value"].get<double>();
+
+    // Damping coefficients
+    auto damping = dynamics["damping"];
+    D_u_ = damping["linear"]["D_u"].get<double>();
+    D_v_ = damping["linear"]["D_v"].get<double>();
+    D_w_ = damping["linear"]["D_w"].get<double>();
+    D_p_ = damping["angular"]["D_p"].get<double>();
+    D_q_ = damping["angular"]["D_q"].get<double>();
+    D_r_ = damping["angular"]["D_r"].get<double>();
     
-    std::copy(tau_p.begin(), tau_p.end(), tau_p_eigen.data());
+    Dn_u_ = damping["linear_n"]["Dn_u"].get<double>();
+    Dn_v_ = damping["linear_n"]["Dn_v"].get<double>();
+    Dn_w_ = damping["linear_n"]["Dn_w"].get<double>();
+    Dn_p_ = damping["angular_n"]["Dn_p"].get<double>();
+    Dn_q_ = damping["angular_n"]["Dn_q"].get<double>();
+    Dn_r_ = damping["angular_n"]["Dn_r"].get<double>();
 
-    // 2. Call the core dynamics function to get the derivatives (eta_dot, nu_dot)
-    auto [eta_dot, nu_dot] = this->dynamics(eta_current, nu_current, tau_p_eigen);
+    // Propeller parameters
+    auto propeller = dynamics["propeller"];
+    p_rear_max_ = propeller["force_range_r"]["max"].get<double>();
+    p_front_mid_max_ = propeller["force_range_f_m"]["max"].get<double>();
 
-    // 3. Calculate the next state using Forward Euler integration
-    Vector6d eta_next = eta_current + eta_dot * dt;
-    Vector6d nu_next = nu_current + nu_dot * dt;
-
-    // 4. Combine the results into a single std::array<double, 12>
-    std::array<double, 12> next_state_array;
-    std::copy(eta_next.data(), eta_next.data() + 6, next_state_array.begin());
-    std::copy(nu_next.data(), nu_next.data() + 6, next_state_array.begin() + 6);
-
-    return next_state_array;
+    // Weight and buoyancy
+    W_ = mass_ * g_;
+    B_ = fluid_density_ * displaced_volume_ * g_;
+    W_minus_B_ = W_ - B_;
 }
 
-Eigen::Matrix3d VehicleModel::skew_symmetric(const Eigen::Vector3d& a) const {
-    Eigen::Matrix3d S;
-    S <<  0,    -a(2),  a(1),
-         a(2),    0,   -a(0),
-        -a(1),  a(0),    0;
-    return S;
-}
+void VehicleModel::calculate_linear() {
+    // Use MX for symbolic matrices. (Note: constants are automatically converted.)
+    Sparsity diag_sp = Sparsity::diag(3);
+    MX A11 = MX::zeros(diag_sp);
+    A11(0,0) = C_X_;
+    A11(1,1) = C_Y_;
+    A11(2,2) = C_Z_;
 
-Matrix6d VehicleModel::transformation_matrix(const Vector6d& eta) const {
-    double phi = eta(3), theta = eta(4), psi = eta(5);
-    double cphi = cos(phi), sphi = sin(phi);
-    double cth = cos(theta), sth = sin(theta);
-    double cpsi = cos(psi), spsi = sin(psi);
+    Sparsity sp_A12(3, 3, {0,0,1,2}, {2,1}, true);  // True for column-compressed
+    MX A12 = MX::zeros(sp_A12);
+    A12(1,2) = C_Z_q_;
+    A12(2,1) = C_Y_r_;
+
+    MX A21 = A12.T();
+
+    MX A22 = MX::diag(MX::vertcat({MX(C_K_), MX(C_M_), MX(C_N_)}));
     
-    Eigen::Matrix3d R;
-    R << cpsi*cth, cpsi*sth*sphi - spsi*cphi, cpsi*sth*cphi + spsi*sphi,
-         spsi*cth, spsi*sth*sphi + cpsi*cphi, spsi*sth*cphi - cpsi*sphi,
-         -sth,     cth*sphi,                  cth*cphi;
-
-    Eigen::Matrix3d T;
-    if (std::abs(cth) < 1e-6) { T = Eigen::Matrix3d::Identity(); } 
-    else { T << 1, sphi*tan(theta), cphi*tan(theta), 0, cphi, -sphi, 0, sphi/cth, cphi/cth; }
-
-    Matrix6d J = Matrix6d::Zero();
-    J.block<3, 3>(0, 0) = R;
-    J.block<3, 3>(3, 3) = T;
-    return J;
-}
-
-// ==============================================================================
-//           DEFINITIVE, STANDARD FOSSEN MODEL CORIOLIS MATRIX
-// ==============================================================================
-Matrix6d VehicleModel::coriolis_matrix(const Vector6d& nu) const {
-    Eigen::Vector3d nu1 = nu.head<3>();
-    Eigen::Vector3d nu2 = nu.tail<3>();
-
-    // --- C_rb (Rigid Body) Term ---
-    Matrix6d C_rb = Matrix6d::Zero();
-    C_rb.block<3, 3>(3, 3) = -skew_symmetric(I_cg_ * nu2);
-
-    // --- C_a (Added Mass) Term ---
-    Matrix6d C_a = Matrix6d::Zero();
-    C_a.block<3, 3>(0, 3) = -skew_symmetric(A11_added_mass_ * nu1);
-    C_a.block<3, 3>(3, 0) = -skew_symmetric(A11_added_mass_ * nu1);
-    C_a.block<3, 3>(3, 3) = -skew_symmetric(A22_added_mass_ * nu2);
-
-    return C_rb + C_a;
-}
-
-Matrix6d VehicleModel::damping_matrix(const Vector6d& nu) const {
-    Matrix6d D_quadratic = D_n_;
-    for (int i = 0; i < 6; ++i) { D_quadratic(i, i) *= std::abs(nu(i)); }
-    return D_l_ + D_quadratic;
-}
-
-Vector6d VehicleModel::restoring_forces(const Vector6d& eta) const {
-    double phi = eta(3), theta = eta(4);
-    double cth = cos(theta), sth = sin(theta), sphi = sin(phi), cphi = cos(phi);
+    Ma_ = MX::vertcat({MX::horzcat({A11, A12}), MX::horzcat({A21, A22})});
     
-    Vector6d g_eta;
-    g_eta << (W_ - B_) * sth,
-             -(W_ - B_) * cth * sphi,
-             -(W_ - B_) * cth * cphi,
-             -(r_g_(1) * W_ - r_B_(1) * B_) * cth * cphi + (r_g_(2) * W_ - r_B_(2) * B_) * cth * sphi,
-              (r_g_(2) * W_ - r_B_(2) * B_) * sth + (r_g_(0) * W_ - r_B_(0) * B_) * cth * cphi,
-             -(r_g_(0) * W_ - r_B_(0) * B_) * cth * sphi - (r_g_(1) * W_ - r_B_(1) * B_) * sth;
-    return g_eta;
+    MX I = MX::vertcat({
+        MX::horzcat({MX(Lxx_), -MX(Lxy_), -MX(Lxz_)}),
+        MX::horzcat({-MX(Lyx_), MX(Lyy_), -MX(Lyz_)}),
+        MX::horzcat({-MX(Lzx_), -MX(Lzy_), MX(Lzz_)})
+    });
+    
+    skew_m_   = mass_ * skew_symmetric(r_g_);
+    skew_A11_ = mass_ * skew_symmetric(A11);
+    skew_A22_ = mass_ * skew_symmetric(A22);
+    skew_I_   = skew_symmetric(I);
+    
+    MX Mrb_top    = MX::horzcat({mass_ * MX::eye(3), -skew_m_});
+    MX Mrb_bottom = MX::horzcat({skew_m_, I});
+    MX Mrb = MX::vertcat({Mrb_top, Mrb_bottom});
+    
+    M_ = Mrb + Ma_;
+
+    // Use solve to get the inverse symbolically
+    M_inv_ = simplify(MX::inv(M_));
+    
+    MX Dl_lin = MX::diag(MX::vertcat({MX(D_u_), MX(D_v_), MX(D_w_)}));
+    MX Dl_ang = MX::diag(MX::vertcat({MX(D_p_), MX(D_q_), MX(D_r_)}));
+    Dl_ = MX::blockcat({{Dl_lin, MX::zeros(3,3)}, {MX::zeros(3,3), Dl_ang}});
+    
+    MX Dn_ang = MX::diag(MX::vertcat({MX(Dn_p_), MX(Dn_q_), MX(Dn_r_)}));
+    MX Dn_lin = MX::diag(MX::vertcat({MX(Dn_u_), MX(Dn_v_), MX(Dn_w_)}));
+    Dn_ = MX::blockcat({{Dn_lin, MX::zeros(3,3)}, {MX::zeros(3,3), Dn_ang}});
+    
+    A_ = MX::vertcat({
+        MX::horzcat({1, 1, cos(a_), cos(a_), 0, 0, 0, 0}),
+        MX::horzcat({0, 0, sin(a_), sin(a_), 0, 0, 0, 0}),
+        MX::horzcat({0, 0, 0, 0, 1, 1, 1, 1}),
+        MX::horzcat({0, 0, 0, 0, lm_, -lm_, lm_, -lm_}),
+        MX::horzcat({0, 0, 0, 0, rf_, rf_, -rf_, -rf_}),
+        MX::horzcat({-wf_, wf_, -lr_*sin(a_), lr_*sin(a_), 0, 0, 0, 0})
+    });
 }

@@ -13,15 +13,19 @@ set(CMAKE_CXX_EXTENSIONS      OFF)
 set(CMAKE_CUDA_STANDARD        14)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
+set(CASADI_LINK_LIBS casadi)
+
 list(APPEND CMAKE_PREFIX_PATH "/libtorch")
 
 # ─── Dependencies ───────────────────────────────────────────────────────────────
 find_package(CUDAToolkit REQUIRED)
+find_package(CASADI REQUIRED)
 find_package(Boost 1.65 REQUIRED COMPONENTS system)
 find_package(ZLIB REQUIRED)
 find_package(Torch REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(glog REQUIRED)
 
 # ─── Include Directories ───────────────────────────────────────────────────────
 file(GLOB_RECURSE SOURCES 
@@ -33,6 +37,7 @@ file(GLOB_RECURSE SOURCES
 
 include_directories(
     include
+    ${CASADI_INCLUDE_DIR}
     ${ZeroMQ_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
     ${ZLIB_INCLUDE_DIRS}
@@ -56,6 +61,11 @@ add_executable(control_system
     src/mission/mission_sonar_imp.cpp
 )
 
+target_compile_definitions(control_system PRIVATE
+    C10_USE_GLOG
+    GLOG_NO_ABBREVIATED_SEVERITIES
+)
+
 # Include directories
 target_include_directories(control_system PRIVATE
   ${CMAKE_SOURCE_DIR}/include
@@ -74,8 +84,10 @@ set_target_properties(control_system PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 # ─── Link Libraries ────────────────────────────────────────────────────────────
 target_link_libraries(control_system PRIVATE
     torch
+    ${CASADI_LINK_LIBS} 
     ${ZeroMQ_LIBRARY}
     Boost::system
+    glog::glog
     zmq
     Eigen3::Eigen
     ZLIB::ZLIB

@@ -5,13 +5,13 @@
 #include <optional>
 #include <string>
 #include "mapping/config.h"
-#include "control/model_inference.h"
 #include <array>
 #include "communication/topics.hpp"
+#include "control/model_inference.h"
 
 class NonlinearMPC {
 public:
-    NonlinearMPC(std::string modelPath = "/models/fossen_net_1/fossen_net_scripted.pt", std::string scalerPath = "/models/fossen_net_1/scalers.json");
+    NonlinearMPC(std::string modelPath = "../models/fossen_net_1/fossen_net_scripted.pt", std::string scalerPath = "../models/fossen_net_1/scalers.json");
 
     std::array<double, 8> solve(const EnvironmentTopic& local_env, const MissionTopic& local_mission);
 

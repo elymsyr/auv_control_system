@@ -2,9 +2,9 @@
 #define ENVIRONMENT_H
 
 #include "system/subsystem.h"
+#include "control/vehicle_model.h"
 #include "communication/topics.hpp"
 #include "communication/communication_methods.h"
-#include "control/vehicle_model.h"
 #include <iostream>
 #include <chrono>
 #include <zmq_addon.hpp>
