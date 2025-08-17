@@ -12,6 +12,7 @@
 #include <vector>
 #include <stdexcept>
 #include "control/fossennet.h"
+#include "control/vehicle_model.h"
 
 // class Model {
 //     cv::dnn::Net net;
@@ -72,6 +73,7 @@ protected:
 private:
     EnvironmentTopic x0;
     MissionTopic x_ref;
+    VehicleModel vehicle_model_;
 };
 
 #endif // MOTION_H

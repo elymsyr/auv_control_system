@@ -4,17 +4,23 @@
 #include <string>
 #include <nlohmann/json.hpp>
 #include <Eigen/Dense>
+#include "communication/topics.hpp"
+#include <array>
 
 // Type aliases for clarity
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
+using Vector8d = Eigen::Matrix<double, 8, 1>;
 using Matrix8x6d = Eigen::Matrix<double, 6, 8>;
 
 class VehicleModel {
 public:
     VehicleModel(const std::string& config_path);
     std::pair<Vector6d, Vector6d> dynamics(const Vector6d& eta, const Vector6d& nu, const Eigen::Vector<double, 8>& tau_p) const;
-
+    std::array<double, 12> calculate_next_state(
+        const EnvironmentTopic& current_state,
+        const std::array<double, 8>& tau_p,
+        double dt) const;
 private:
     void load_config(const std::string& path);
     void build_matrices();

@@ -122,6 +122,38 @@ std::pair<Vector6d, Vector6d> VehicleModel::dynamics(const Vector6d& eta, const 
     return {eta_dot, nu_dot};
 }
 
+std::array<double, 12> VehicleModel::calculate_next_state(
+    const EnvironmentTopic& current_state,
+    const std::array<double, 8>& tau_p,
+    double dt) const
+{
+    // 1. Convert current state from std::array to Eigen::Vector
+    Vector6d eta_current, nu_current;
+    Vector8d tau_p_eigen; // Or Eigen::Vector<double, 8>
+
+    // --- FIX IS HERE ---
+    // Use pointer-based access for C-style arrays instead of .begin()/.end()
+    std::copy(current_state.eta, current_state.eta + 6, eta_current.data());
+    std::copy(current_state.nu, current_state.nu + 6, nu_current.data());
+    // --- END OF FIX ---
+    
+    std::copy(tau_p.begin(), tau_p.end(), tau_p_eigen.data());
+
+    // 2. Call the core dynamics function to get the derivatives (eta_dot, nu_dot)
+    auto [eta_dot, nu_dot] = this->dynamics(eta_current, nu_current, tau_p_eigen);
+
+    // 3. Calculate the next state using Forward Euler integration
+    Vector6d eta_next = eta_current + eta_dot * dt;
+    Vector6d nu_next = nu_current + nu_dot * dt;
+
+    // 4. Combine the results into a single std::array<double, 12>
+    std::array<double, 12> next_state_array;
+    std::copy(eta_next.data(), eta_next.data() + 6, next_state_array.begin());
+    std::copy(nu_next.data(), nu_next.data() + 6, next_state_array.begin() + 6);
+
+    return next_state_array;
+}
+
 Eigen::Matrix3d VehicleModel::skew_symmetric(const Eigen::Vector3d& a) const {
     Eigen::Matrix3d S;
     S <<  0,    -a(2),  a(1),

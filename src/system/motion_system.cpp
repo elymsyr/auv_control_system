@@ -1,5 +1,6 @@
 #include "system/motion_system.h"
 #include "communication/topics.hpp"
+#include "communication/communication_methods.h"
 
 MotionSystem::MotionSystem(std::string name, int runtime, unsigned int system_code) 
     : Subsystem(name, runtime, system_code),
@@ -37,11 +38,10 @@ void MotionSystem::function() {
         }
         
         std::array<double, 8> propeller = mpc.solve(x0, x_ref);
-        // TODO: Create vehicle model and calculate next state here and pass it to the motion_state 
-        // TODO: Fix model and scaler paths
+        std::array<double, 12> next_state = vehicle_model_.calculate_next_state(x0, propeller, 0.1);
         {
             std::lock_guard<std::mutex> lk(mtx);
-            motion_state.set(propeller);
+            motion_state.set(propeller, next_state);
         }
     } catch (const std::exception& e) {
         std::cerr << "MotionSystem error: " << e.what() << std::endl;
