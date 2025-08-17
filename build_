@@ -1,0 +1,8 @@
+cd ~/GitHub/auv_control_system
+rm -rf build
+mkdir build
+cd build
+cmake -DBOOST_ROOT=${CONDA_PREFIX} \
+    -DCMAKE_PREFIX_PATH=${CONDA_PREFIX} \
+    -DCMAKE_BUILD_TYPE=Debug ..
+make -j$(nproc)

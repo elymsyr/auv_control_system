@@ -51,7 +51,8 @@ add_executable(control_system
     src/mapping/environment_global.cu
     src/mapping/environment_helper.cpp
     src/mapping/environment_map.cu
-    src/control/nlmpc.cpp
+    src/control/fossennet.cpp
+    src/control/model_inference.cpp
     src/control/vehicle_model.cpp
     src/mission/mission_sonar_imp.cpp
 )

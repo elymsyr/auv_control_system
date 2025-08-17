@@ -14,7 +14,7 @@
 #include <vector>
 #include <stdexcept>
 #include <casadi/casadi.hpp>
-#include "control/nlmpc.h"
+#include "control/fossennet.h"
 #include "control/vehicle_model.h"
 
 // class Model {
@@ -63,6 +63,7 @@ public:
     MissionTopic mission_state;
     EnvironmentTopic env_state;
     NonlinearMPC mpc;
+    VehicleModel vehicle_model_;
 
     MotionSystem(std::string name = "Motion", int runtime = 200, unsigned int system_code = 2);
     void init_() override;
@@ -72,10 +73,6 @@ protected:
     void function() override;
     void publish() override;
     std::mutex mission_mtx, env_mtx;
-
-private:
-    casadi::DM x0;
-    casadi::DM x_ref;
 
 };
 

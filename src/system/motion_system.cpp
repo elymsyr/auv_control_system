@@ -1,15 +1,10 @@
 #include "system/motion_system.h"
-#include <casadi/casadi.hpp>
-
-using namespace casadi;
 
 MotionSystem::MotionSystem(std::string name, int runtime, unsigned int system_code) 
     : Subsystem(name, runtime, system_code),
-      mpc("../config.json", 40, 0.1),
+      mpc(),
       mission_sub_(mission_state, mission_mtx),
-      env_sub_(env_state, env_mtx),
-      x0(DM::vertcat({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})),
-      x_ref(DM::zeros(12, 41))
+      env_sub_(env_state, env_mtx)
 {
     for (int i = 0; i < 20 && !motion_pub_.is_bound() ; i++) {
         motion_pub_.bind("tcp://localhost:5563");
@@ -33,26 +28,26 @@ void MotionSystem::init_() {
 
 void MotionSystem::function() {
     try {
+        EnvironmentTopic local_env;
+        MissionTopic local_mission;
+        const double dt = 0.1;
+
         {
             std::lock_guard<std::mutex> lk(mtx);
-            // std::array<double, 12> x_current = env_state.get_array();
-            env_state.get_dm(x0);
-            mission_state.get_dm(x_ref);
+            local_env = env_state;
+            local_mission = mission_state;
         }
-        
-        // Check for valid inputs
-        if (x0.is_empty() || x_ref.is_empty()) {
-            throw std::runtime_error("Empty state received");
-        }
-        auto solution = mpc.solve(x0, x_ref);
-        DM propeller = solution.first;
-        DM x_opt = solution.second;
-        DM x_next = x_opt(Slice(), 1);
-        
+
+        std::array<double, 8> propeller_output = mpc.solve(local_env, local_mission);
+
+        std::array<double, 12> current_state = local_env.get_array();
+        std::array<double, 12> x_next = vehicle_model_.predict_next_state(current_state, propeller_output, dt);
+
         {
             std::lock_guard<std::mutex> lk(mtx);
-            motion_state.set(propeller, x_next);
+            motion_state.set(propeller_output, x_next);
         }
+
     } catch (const std::exception& e) {
         std::cerr << "MotionSystem error: " << e.what() << std::endl;
     }

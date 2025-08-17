@@ -13,6 +13,65 @@ using json = nlohmann::json;
 VehicleModel::VehicleModel(const std::string& config_path) {
     load_config(config_path);
     calculate_linear();
+
+    // 1. Define symbolic placeholders for the inputs
+    MX eta_sym = MX::sym("eta", 6, 1);
+    MX nu_sym = MX::sym("nu", 6, 1);
+    MX propeller_sym = MX::sym("propeller", 8, 1);
+
+    // 2. Express the generalized forces (tau) from propeller inputs
+    // This assumes A_ is your thrust allocation matrix (tau = A * propeller_forces)
+    MX tau_sym = MX::mtimes(A_, propeller_sym);
+
+    // 3. Call your existing symbolic dynamics function
+    auto dynamics_out = dynamics(eta_sym, nu_sym, tau_sym);
+    MX eta_dot_sym = dynamics_out.first;
+    MX nu_dot_sym = dynamics_out.second;
+
+    // 4. Concatenate the outputs into a single state derivative vector
+    MX x_dot_sym = MX::vertcat({eta_dot_sym, nu_dot_sym});
+
+    // 5. Create the callable Function and store it in the class member
+    dynamics_func_ = Function("dynamics_func",
+                              {eta_sym, nu_sym, propeller_sym}, // List of inputs
+                              {x_dot_sym});                    // List of outputs
+}
+
+std::array<double, 12> VehicleModel::predict_next_state(
+    const std::array<double, 12>& current_state, 
+    const std::array<double, 8>& propeller_input, 
+    double dt) const
+{
+    // 1. Prepare numerical inputs for the CasADi function
+    // The function needs the state split into position (eta) and velocity (nu)
+    std::vector<double> eta_vec(current_state.begin(), current_state.begin() + 6);
+    std::vector<double> nu_vec(current_state.begin() + 6, current_state.end());
+    std::vector<double> propeller_vec(propeller_input.begin(), propeller_input.end());
+
+    // Pack the inputs into a list of CasADi matrices (DM)
+    std::vector<DM> args = {
+        DM(eta_vec),
+        DM(nu_vec),
+        DM(propeller_vec)
+    };
+
+    // 2. Call the pre-compiled dynamics function to get the state derivatives
+    // This call is numerically fast as the symbolic graph is already built.
+    std::vector<DM> result = dynamics_func_(args);
+
+    // 3. Extract the resulting derivatives [eta_dot; nu_dot]
+    DM x_dot_dm = result.at(0);
+    std::vector<double> x_dot_vec = x_dot_dm.get_elements(); // Converts the 12x1 matrix to a std::vector
+
+    // 4. Perform a simple forward Euler integration step
+    // x_next = x_current + x_dot * dt
+    std::array<double, 12> next_state;
+    for (int i = 0; i < 12; ++i) {
+        next_state[i] = current_state[i] + x_dot_vec[i] * dt;
+    }
+
+    // 5. Return the predicted next state
+    return next_state;
 }
 
 // Now working with MX instead of DM.

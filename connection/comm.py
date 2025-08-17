@@ -4,7 +4,7 @@ from datetime import datetime
 import threading
 import time
 import zmq
-from connection.topics import StateTopic, CommandTopic, EnvironmentTopic, MissionTopic
+from topics import StateTopic, CommandTopic, EnvironmentTopic, MissionTopic
 
 __SYSTEM__ = {
     0: "Main System",

@@ -32,6 +32,13 @@ private:
     void load_config(const std::string& path);
     void calculate_linear();
 
+    casadi::Function dynamics_func_; 
+
+    std::array<double, 12> predict_next_state(
+        const std::array<double, 12>& current_state, 
+        const std::array<double, 8>& propeller_input, 
+        double dt) const;
+
     // Member variables
     double Ixx_, Ixy_, Ixz_, Iyx_, Iyy_, Iyz_, Izx_, Izzy_, Izz_;
     double Lxx_, Lxy_, Lxz_, Lyx_, Lyy_, Lyz_, Lzx_, Lzy_, Lzz_;
