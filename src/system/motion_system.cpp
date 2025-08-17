@@ -1,15 +1,11 @@
 #include "system/motion_system.h"
-#include <casadi/casadi.hpp>
-
-using namespace casadi;
+#include "communication/topics.hpp"
 
 MotionSystem::MotionSystem(std::string name, int runtime, unsigned int system_code) 
     : Subsystem(name, runtime, system_code),
-      mpc("../config.json", 40, 0.1),
+      mpc(),
       mission_sub_(mission_state, mission_mtx),
-      env_sub_(env_state, env_mtx),
-      x0(DM::vertcat({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})),
-      x_ref(DM::zeros(12, 41))
+      env_sub_(env_state, env_mtx)
 {
     for (int i = 0; i < 20 && !motion_pub_.is_bound() ; i++) {
         motion_pub_.bind("tcp://localhost:5563");
@@ -36,22 +32,16 @@ void MotionSystem::function() {
         {
             std::lock_guard<std::mutex> lk(mtx);
             // std::array<double, 12> x_current = env_state.get_array();
-            env_state.get_dm(x0);
-            mission_state.get_dm(x_ref);
+            x0 = env_state;
+            x_ref = mission_state;
         }
         
-        // Check for valid inputs
-        if (x0.is_empty() || x_ref.is_empty()) {
-            throw std::runtime_error("Empty state received");
-        }
-        auto solution = mpc.solve(x0, x_ref);
-        DM propeller = solution.first;
-        DM x_opt = solution.second;
-        DM x_next = x_opt(Slice(), 1);
-        
+        std::array<double, 8> propeller = mpc.solve(x0, x_ref);
+        // TODO: Create vehicle model and calculate next state here and pass it to the motion_state 
+        // TODO: Fix model and scaler paths
         {
             std::lock_guard<std::mutex> lk(mtx);
-            motion_state.set(propeller, x_next);
+            motion_state.set(propeller);
         }
     } catch (const std::exception& e) {
         std::cerr << "MotionSystem error: " << e.what() << std::endl;

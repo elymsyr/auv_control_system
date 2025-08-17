@@ -29,8 +29,11 @@ void NonlinearMPC::initialization() {
 std::array<double, 8> NonlinearMPC::solve(const EnvironmentTopic& local_env, const MissionTopic& local_mission)
 {
     std::vector<float> rawInputData;
+    // Pre-allocating one element too many, but it's okay.
+    // Correct size is 3 + 6 + (HORIZON * 12)
     rawInputData.reserve(12 + HORIZON * 12);
 
+    // Add current state (env) to the input vector
     for (size_t i = 3; i < 6; ++i) {
         rawInputData.push_back(static_cast<float>(local_env.eta[i]));
     }
@@ -38,8 +41,16 @@ std::array<double, 8> NonlinearMPC::solve(const EnvironmentTopic& local_env, con
         rawInputData.push_back(static_cast<float>(local_env.nu[i]));
     }
 
-    for (size_t i = 1; i <= HORIZON; ++i) {
-        const auto& point = local_mission.trajectory[i];
+    // ====================================================================
+    // MODIFIED PART
+    // ====================================================================
+    // Get the trajectory in the format we need
+    const auto trajectory_points = local_mission.get_trajectory_points();
+
+    // CRITICAL FIX: Loop from 0 to HORIZON-1.
+    // The original loop (i=1 to i<=HORIZON) was incorrect and would cause a buffer overflow.
+    for (size_t i = 0; i < HORIZON; ++i) {
+        const auto& point = trajectory_points[i]; // Access the correctly formatted point
 
         rawInputData.push_back(static_cast<float>(point.eta_desired[0] - local_env.eta[0]));
         rawInputData.push_back(static_cast<float>(point.eta_desired[1] - local_env.eta[1]));
@@ -52,14 +63,14 @@ std::array<double, 8> NonlinearMPC::solve(const EnvironmentTopic& local_env, con
             rawInputData.push_back(static_cast<float>(point.nu_desired[j]));
         }
     }
+    // ====================================================================
 
     std::vector<float> control_output_float;
     try {
         control_output_float = model.runInference(rawInputData);
     } catch (const std::exception& e) {
         std::cerr << "An error occurred during inference in solve(): " << e.what() << std::endl;
-        std::array<double, 8> error_control = {0.0};
-        return error_control;
+        return {0.0}; // Return a default/safe control input
     }
 
     std::array<double, 8> control_input = {0.0};

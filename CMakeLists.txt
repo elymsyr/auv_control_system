@@ -52,6 +52,7 @@ add_executable(control_system
     src/mapping/environment_map.cu
     src/control/model_inference.cpp
     src/control/fossennet.cpp
+    src/control/vehicle_model.cpp
     src/mission/mission_sonar_imp.cpp
 )
 
@@ -76,6 +77,7 @@ target_link_libraries(control_system PRIVATE
     ${ZeroMQ_LIBRARY}
     Boost::system
     zmq
+    Eigen3::Eigen
     ZLIB::ZLIB
     pthread
     dl

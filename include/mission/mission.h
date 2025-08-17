@@ -1,7 +1,6 @@
 #ifndef MISSION_H
 #define MISSION_H
 
-#include <casadi/casadi.hpp>
 #include <vector>
 #include <string>
 #include <array>

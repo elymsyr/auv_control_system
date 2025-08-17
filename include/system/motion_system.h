@@ -9,13 +9,9 @@
 #include <zmq_addon.hpp>
 #include <any>
 #include <mutex>
-// #include <opencv4/opencv2/dnn.hpp>
-// #include <opencv4/opencv2/core.hpp>
 #include <vector>
 #include <stdexcept>
-#include <casadi/casadi.hpp>
-#include "control/nlmpc.h"
-#include "control/vehicle_model.h"
+#include "control/fossennet.h"
 
 // class Model {
 //     cv::dnn::Net net;
@@ -74,9 +70,8 @@ protected:
     std::mutex mission_mtx, env_mtx;
 
 private:
-    casadi::DM x0;
-    casadi::DM x_ref;
-
+    EnvironmentTopic x0;
+    MissionTopic x_ref;
 };
 
 #endif // MOTION_H

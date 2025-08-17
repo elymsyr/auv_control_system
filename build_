@@ -1,5 +1,5 @@
 # 1. Ensure the environment is active (it already is)
-# conda activate mp_test
+conda activate mp_test
 
 # 2. Go to your project directory
 cd ~/GitHub/auv_control_system

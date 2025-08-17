@@ -4,7 +4,11 @@
 #pragma once
 #include <cstring>
 #include <zmq.hpp>
-#include <casadi/casadi.hpp>
+
+struct TrajectoryPoint {
+    std::array<double, 6> eta_desired;
+    std::array<double, 6> nu_desired;
+};
 
 template<typename Topic>
 void Serialize(zmq::message_t& msg, const Topic& data) {  // Add data parameter
@@ -38,19 +42,6 @@ struct EnvironmentTopic {
         memcpy(this->eta, eta.data(), sizeof(this->eta));
         memcpy(this->nu, nu.data(), sizeof(this->nu));
         memcpy(this->nu_dot, nu_dot.data(), sizeof(this->nu_dot));
-    }
-
-    void get_dm(casadi::DM& merged) {
-        if (merged.is_empty() || merged.size1() != 12 || merged.size2() != 1) {
-            merged = casadi::DM::zeros(12, 1);
-        }
-
-        // Get writable pointer
-        double* data = merged.ptr();
-        if (data) {
-            std::memcpy(data,     eta, 6 * sizeof(double));
-            std::memcpy(data + 6, nu,   6 * sizeof(double));
-        }
     }
 
     std::array<double, 12> get_array() {
@@ -89,50 +80,6 @@ struct MissionTopic {
         }
     }
 
-    void get_dm(casadi::DM& merged) const { // , const std::array<double, 12>& x_current
-        if (merged.is_empty() || merged.size1() != 12 || merged.size2() != HORIZON) {
-            merged = casadi::DM::zeros(12, HORIZON);
-        }
-        double* data = merged.ptr();
-
-        for (int i = 0; i < HORIZON; i++) {
-            // Process eta components (position/orientation)
-            for (int j = 0; j < 6; j++) {
-                data[i * 12 + j] = eta_des[i][j];
-            }
-            
-            // Process nu components (velocity)
-            for (int j = 0; j < 6; j++) {
-                data[i * 12 + 6 + j] = nu_des[i][j];
-            }
-        }
-    }
-
-    void set(const casadi::DM& x_ref) {
-        // Verify matrix dimensions
-        if (x_ref.size1() != 12) {
-            throw std::invalid_argument("x_ref must have exactly 12 rows");
-        }
-        
-        const int horizon_cols = x_ref.size2();
-        const double* data = x_ref.ptr();
-        
-        for (int k = 0; k < HORIZON; k++) {
-            // Use last column if horizon exceeds trajectory length
-            const int col_idx = (k < horizon_cols) ? k : horizon_cols - 1;
-            
-            // Extract eta (position/orientation) - first 6 elements
-            for (int i = 0; i < 6; i++) {
-                eta_des[k][i] = data[col_idx * 12 + i];
-            }
-            
-            // Extract nu (velocities) - next 6 elements
-            for (int i = 0; i < 6; i++) {
-                nu_des[k][i] = data[col_idx * 12 + 6 + i];
-            }
-        }
-    }
-
     void set(const std::array<std::array<double, 12>, HORIZON>& trajectory) {
         for (int i = 0; i < HORIZON; i++) {
             // First 6 elements are eta (position/orientation)
@@ -150,6 +97,15 @@ struct MissionTopic {
             std::memcpy(arr[i].data() + 6, nu_des[i], 6 * sizeof(double));
         }
         return arr;
+    }
+
+    std::array<TrajectoryPoint, HORIZON> get_trajectory_points() const {
+        std::array<TrajectoryPoint, HORIZON> trajectory_points;
+        for (size_t i = 0; i < HORIZON; ++i) {
+            std::memcpy(trajectory_points[i].eta_desired.data(), eta_des[i], 6 * sizeof(double));
+            std::memcpy(trajectory_points[i].nu_desired.data(), nu_des[i], 6 * sizeof(double));
+        }
+        return trajectory_points;
     }
 };
 
@@ -200,17 +156,6 @@ struct MotionTopic {
 
     static constexpr const char* TOPIC = "Motion";
 
-    void set(const casadi::DM& propeller_dm, const casadi::DM& x_next_dm) {
-        if (propeller_dm.numel() != 8 || x_next_dm.numel() != 12) {
-            throw std::runtime_error("Invalid propeller DM size");
-        }
-
-        const double* data = propeller_dm.ptr();
-        std::copy(data, data + 8, propeller);
-        data = x_next_dm.ptr();
-        std::copy(data, data + 12, x_next);
-    }
-
     void set(const std::array<double, 8>& propeller = {0, 0, 0, 0, 0, 0, 0, 0}, const std::array<double, 12>& x_next = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) {
         std::memcpy(this->propeller, propeller.data(), sizeof(this->propeller));
         std::memcpy(this->x_next, x_next.data(), sizeof(this->x_next));
@@ -222,6 +167,11 @@ struct MotionTopic {
 
         if (x_next_copy.size() < 12) x_next_copy.resize(12);
         std::memcpy(x_next_copy.data(), this->x_next, sizeof(this->x_next));
+    }
+
+    void get(std::vector<double>& propeller_copy) {
+        if (propeller_copy.size() < 8) propeller_copy.resize(8);
+        std::memcpy(propeller_copy.data(), this->propeller, sizeof(this->propeller));
     }
 
     inline void set(const MotionTopic& o) {

@@ -4,15 +4,11 @@
 #include "system/subsystem.h"
 #include "communication/topics.hpp"
 #include "communication/communication_methods.h"
-#include "control/vehicle_model.h"
 #include <iostream>
 #include <chrono>
 #include <zmq_addon.hpp>
 #include <any>
-#include <casadi/casadi.hpp>
-#include <array> // Include array header
-
-using namespace casadi;
+#include <array>
 
 class EnvironmentSystem : public Subsystem {
     Publisher<EnvironmentTopic> env_pub_;
