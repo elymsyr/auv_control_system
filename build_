@@ -1,0 +1,19 @@
+# 1. Ensure the environment is active (it already is)
+# conda activate mp_test
+
+# 2. Go to your project directory
+cd ~/GitHub/auv_control_system
+
+# 3. Recreate the build directory for a clean start
+rm -rf build
+mkdir build
+cd build
+
+# 4. Run CMake with the explicit path to Torch
+#    This is the key command that should fix the error.
+cmake -DCMAKE_PREFIX_PATH=${CONDA_PREFIX} \
+      -DTorch_DIR=/home/elymsyr/miniconda3/envs/mp_test/lib/python3.11/site-packages/torch/share/cmake/Torch \
+      -DCMAKE_BUILD_TYPE=Debug ..
+
+# 5. Compile your project
+make -j$(nproc)

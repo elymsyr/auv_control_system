@@ -13,15 +13,15 @@ set(CMAKE_CXX_EXTENSIONS      OFF)
 set(CMAKE_CUDA_STANDARD        14)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
-list(APPEND CMAKE_PREFIX_PATH "/libtorch")
+# ─── CasADi Configuration ───────────────────────────────────────────────────────
+set(CASADI_LINK_LIBS casadi)
 
 # ─── Dependencies ───────────────────────────────────────────────────────────────
 find_package(CUDAToolkit REQUIRED)
+find_package(CASADI REQUIRED)
 find_package(Boost 1.65 REQUIRED COMPONENTS system)
-find_package(ZLIB REQUIRED)
-find_package(Torch REQUIRED)
-find_package(Eigen3 REQUIRED)
-find_package(nlohmann_json REQUIRED)
+find_package(OpenCV REQUIRED COMPONENTS dnn)
+find_package(ZLIB     REQUIRED)
 
 # ─── Include Directories ───────────────────────────────────────────────────────
 file(GLOB_RECURSE SOURCES 
@@ -33,7 +33,8 @@ file(GLOB_RECURSE SOURCES
 
 include_directories(
     include
-    ${ZeroMQ_INCLUDE_DIRS}
+    ${CASADI_INCLUDE_DIR}
+    ${ZeroMQ_INCLUDE_DIR}
     ${Boost_INCLUDE_DIRS}
     ${ZLIB_INCLUDE_DIRS}
 )
@@ -50,8 +51,8 @@ add_executable(control_system
     src/mapping/environment_global.cu
     src/mapping/environment_helper.cpp
     src/mapping/environment_map.cu
-    src/control/model_inference.cpp
-    src/control/fossennet.cpp
+    src/control/nlmpc.cpp
+    src/control/vehicle_model.cpp
     src/mission/mission_sonar_imp.cpp
 )
 
@@ -72,10 +73,11 @@ set_target_properties(control_system PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
 # ─── Link Libraries ────────────────────────────────────────────────────────────
 target_link_libraries(control_system PRIVATE
-    torch
+    ${CASADI_LINK_LIBS} 
     ${ZeroMQ_LIBRARY}
     Boost::system
     zmq
+    ${OpenCV_LIBS}
     ZLIB::ZLIB
     pthread
     dl
