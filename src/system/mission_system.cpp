@@ -1,6 +1,5 @@
 #include "system/mission_system.h"
 #include "mapping/environment.h"
-#include <casadi/casadi.hpp>
 #include "mission/mission_sonar_imp.h"
 
 MissionSystem::MissionSystem(std::string name, int runtime, unsigned int system_code)

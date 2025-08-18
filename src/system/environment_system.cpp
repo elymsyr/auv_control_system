@@ -1,9 +1,7 @@
 #include "system/environment_system.h"
 #include "control/vehicle_model.h"
-#include <casadi/casadi.hpp>
 #include <algorithm>
 
-using namespace casadi;
 
 EnvironmentSystem::EnvironmentSystem(std::string name, int runtime, unsigned int system_code)
     : motion_sub_(motion_state, motion_mtx), Subsystem(name, runtime, system_code)

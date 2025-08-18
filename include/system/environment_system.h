@@ -9,10 +9,8 @@
 #include <chrono>
 #include <zmq_addon.hpp>
 #include <any>
-#include <casadi/casadi.hpp>
 #include <array> // Include array header
 
-using namespace casadi;
 
 class EnvironmentSystem : public Subsystem {
     Publisher<EnvironmentTopic> env_pub_;

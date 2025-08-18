@@ -12,7 +12,7 @@ using json = nlohmann::json;
 
 class VehicleModel {
 public:
-    explicit VehicleModel(const std::string& config_path);
+    explicit VehicleModel(const std::string& config_path = "../config.json");
 
     MX barrier_function_mx(const MX& x, const MX& y) const;
     MX skew_symmetric(const MX& a) const;
@@ -28,16 +28,16 @@ public:
     double get_p_rear_max() const;
     bool has_map() const;
 
+    std::array<double, 12> predict_next_state(
+        const std::array<double, 12>& current_state, 
+        const std::array<double, 8>& propeller_input, 
+        double dt) const;
+
 private:
     void load_config(const std::string& path);
     void calculate_linear();
 
     casadi::Function dynamics_func_; 
-
-    std::array<double, 12> predict_next_state(
-        const std::array<double, 12>& current_state, 
-        const std::array<double, 8>& propeller_input, 
-        double dt) const;
 
     // Member variables
     double Ixx_, Ixy_, Ixz_, Iyx_, Iyy_, Iyz_, Izx_, Izzy_, Izz_;

@@ -13,7 +13,6 @@
 // #include <opencv4/opencv2/core.hpp>
 #include <vector>
 #include <stdexcept>
-#include <casadi/casadi.hpp>
 #include "control/fossennet.h"
 #include "control/vehicle_model.h"
 

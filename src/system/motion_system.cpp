@@ -3,6 +3,7 @@
 MotionSystem::MotionSystem(std::string name, int runtime, unsigned int system_code) 
     : Subsystem(name, runtime, system_code),
       mpc(),
+      vehicle_model_(),
       mission_sub_(mission_state, mission_mtx),
       env_sub_(env_state, env_mtx)
 {

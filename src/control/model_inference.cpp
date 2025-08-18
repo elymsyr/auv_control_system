@@ -5,6 +5,7 @@
 #include <opencv2/dnn.hpp>
 #include <opencv2/core.hpp>
 #include <nlohmann/json.hpp>
+#include <opencv2/core/cuda.hpp>
 
 using json = nlohmann::json;
 
@@ -23,15 +24,21 @@ bool ModelInference::loadModel(const std::string& modelPath) {
 
         // Check for CUDA backend availability and set it as the preferred target.
         // This is equivalent to model.to(torch::kCUDA).
-        if (cv::cuda::getCudaEnabledDeviceCount() > 0) {
-            std::cout << "CUDA is available. Setting backend to CUDA." << std::endl;
-            net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-            net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
-        } else {
-            std::cout << "Warning: CUDA not available. Using CPU backend." << std::endl;
+        #ifdef HAVE_CUDA
+            if (cv::cuda::getCudaEnabledDeviceCount() > 0) {
+                std::cout << "CUDA is available. Setting backend to CUDA." << std::endl;
+                net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+                net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+            } else {
+                std::cout << "Warning: CUDA-enabled OpenCV build, but no active device found. Using CPU backend." << std::endl;
+                net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+                net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+            }
+        #else
+            std::cout << "Warning: OpenCV was not built with CUDA support. Using CPU backend." << std::endl;
             net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
             net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-        }
+        #endif
         
         std::cout << "Model loaded successfully from: " << modelPath << std::endl;
     } catch (const std::exception& e) {

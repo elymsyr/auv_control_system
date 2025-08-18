@@ -14,7 +14,7 @@ public:
      * @param modelPath Full or relative path to the ONNX model file.
      * @param scalerPath Full or relative path to the JSON scaler file.
      */
-    NonlinearMPC(const std::string& modelPath, const std::string& scalerPath);
+    NonlinearMPC(const std::string& modelPath = "../models/fossen_net_1/fossen_net_scripted.pt", const std::string& scalerPath = "../models/fossen_net_1/scalers.json");
 
     /**
      * @brief Initializes the controller by loading the model and scalers.
@@ -31,7 +31,7 @@ public:
     std::array<double, 8> solve(const EnvironmentTopic& local_env, const MissionTopic& local_mission);
 
 private:
-    ModelInference model_;      // The inference engine instance.
+    ModelInference model;      // The inference engine instance.
     std::string modelPath_;     // Path to the ONNX model.
     std::string scalerPath_;    // Path to the scaler data.
 };
