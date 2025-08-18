@@ -14,27 +14,19 @@ VehicleModel::VehicleModel(const std::string& config_path) {
     load_config(config_path);
     calculate_linear();
 
-    // 1. Define symbolic placeholders for the inputs
     MX eta_sym = MX::sym("eta", 6, 1);
     MX nu_sym = MX::sym("nu", 6, 1);
     MX propeller_sym = MX::sym("propeller", 8, 1);
 
-    // 2. Express the generalized forces (tau) from propeller inputs
-    // This assumes A_ is your thrust allocation matrix (tau = A * propeller_forces)
-    MX tau_sym = MX::mtimes(A_, propeller_sym);
-
-    // 3. Call your existing symbolic dynamics function
-    auto dynamics_out = dynamics(eta_sym, nu_sym, tau_sym);
+    auto dynamics_out = dynamics(eta_sym, nu_sym, propeller_sym);
     MX eta_dot_sym = dynamics_out.first;
     MX nu_dot_sym = dynamics_out.second;
 
-    // 4. Concatenate the outputs into a single state derivative vector
     MX x_dot_sym = MX::vertcat({eta_dot_sym, nu_dot_sym});
 
-    // 5. Create the callable Function and store it in the class member
     dynamics_func_ = Function("dynamics_func",
-                              {eta_sym, nu_sym, propeller_sym}, // List of inputs
-                              {x_dot_sym});                    // List of outputs
+                              {eta_sym, nu_sym, propeller_sym},
+                              {x_dot_sym});
 }
 
 std::array<double, 12> VehicleModel::predict_next_state(
@@ -42,39 +34,29 @@ std::array<double, 12> VehicleModel::predict_next_state(
     const std::array<double, 8>& propeller_input, 
     double dt) const
 {
-    // 1. Prepare numerical inputs for the CasADi function
-    // The function needs the state split into position (eta) and velocity (nu)
     std::vector<double> eta_vec(current_state.begin(), current_state.begin() + 6);
     std::vector<double> nu_vec(current_state.begin() + 6, current_state.end());
     std::vector<double> propeller_vec(propeller_input.begin(), propeller_input.end());
 
-    // Pack the inputs into a list of CasADi matrices (DM)
     std::vector<DM> args = {
         DM(eta_vec),
         DM(nu_vec),
         DM(propeller_vec)
     };
 
-    // 2. Call the pre-compiled dynamics function to get the state derivatives
-    // This call is numerically fast as the symbolic graph is already built.
     std::vector<DM> result = dynamics_func_(args);
 
-    // 3. Extract the resulting derivatives [eta_dot; nu_dot]
     DM x_dot_dm = result.at(0);
-    std::vector<double> x_dot_vec = x_dot_dm.get_elements(); // Converts the 12x1 matrix to a std::vector
+    std::vector<double> x_dot_vec = x_dot_dm.get_elements();
 
-    // 4. Perform a simple forward Euler integration step
-    // x_next = x_current + x_dot * dt
     std::array<double, 12> next_state;
     for (int i = 0; i < 12; ++i) {
         next_state[i] = current_state[i] + x_dot_vec[i] * dt;
     }
 
-    // 5. Return the predicted next state
     return next_state;
 }
 
-// Now working with MX instead of DM.
 MX VehicleModel::skew_symmetric(const MX& a) const {
     return MX::vertcat({
         MX::horzcat({0, -a(2), a(1)}),
@@ -147,16 +129,16 @@ MX VehicleModel::restoring_forces(const MX& eta) const {
 }
 
 std::pair<MX, MX> VehicleModel::dynamics(const MX& eta, const MX& nu, const MX& tau_p) const {
-    MX J_eta   = transformation_matrix(eta);
-    MX eta_dot = mtimes(J_eta, nu);
+    MX eta_dot = mtimes(transformation_matrix(eta), nu);
     
-    MX C      = coriolis_matrix(nu);
-    MX D      = damping_matrix(nu);
-    MX g      = restoring_forces(eta);
+    MX C_nu = mtimes(coriolis_matrix(nu), nu);
+    MX D_nu = mtimes(damping_matrix(nu), nu);
+    MX g_eta = restoring_forces(eta);
     
-    MX tau    = mtimes(A_, tau_p);
-    MX nu_dot = simplify(mtimes(M_inv_, tau - mtimes(C, nu) - mtimes(D, nu) - g));
-    
+    MX total_forces = mtimes(A_, tau_p) - C_nu - D_nu - g_eta;
+
+    MX nu_dot = mtimes(M_inv_, total_forces);
+
     return {eta_dot, nu_dot};
 }
 
@@ -169,7 +151,6 @@ void VehicleModel::load_config(const std::string& path) {
     std::ifstream f(path);
     json config = json::parse(f)["assembly_mass_properties"];
 
-    // Load inertia parameters
     auto moments = config["moments_of_inertia_about_output_coordinate_system"];
     Ixx_ = moments["Ixx"].get<double>();
     Ixy_ = moments["Ixy"].get<double>();
@@ -181,7 +162,6 @@ void VehicleModel::load_config(const std::string& path) {
     Izzy_ = moments["Izy"].get<double>();
     Izz_ = moments["Izz"].get<double>();
 
-    // Load COM inertia
     auto moments_com = config["moments_of_inertia_about_center_of_mass"];
     Lxx_ = moments_com["Lxx"].get<double>();
     Lxy_ = moments_com["Lxy"].get<double>();
@@ -193,21 +173,18 @@ void VehicleModel::load_config(const std::string& path) {
     Lzy_ = moments_com["Lzy"].get<double>();
     Lzz_ = moments_com["Lzz"].get<double>();
 
-    // Load center of mass
     auto com = config["center_of_mass"];
     r_x_ = com["X"].get<double>();
     r_y_ = com["Y"].get<double>();
     r_z_ = com["Z"].get<double>();
     r_g_ = MX::vertcat({r_x_, r_y_, r_z_});
 
-    // Center of buoyancy
     auto buoyancy = config["center_of_buoancy"];
     x_B_ = buoyancy["X"].get<double>();
     y_B_ = buoyancy["Y"].get<double>();
     z_B_ = buoyancy["Z"].get<double>();
     r_B_ = MX::vertcat({x_B_, y_B_, z_B_});
 
-    // Dimensions
     auto dim = config["dimensions"];
     w_ = dim["width"].get<double>();
     h_ = dim["height"].get<double>();
@@ -217,7 +194,6 @@ void VehicleModel::load_config(const std::string& path) {
     lr_ = dim["lr"].get<double>();
     rf_ = dim["rf"].get<double>();
 
-    // Mass and parameters
     mass_ = config["mass"]["value"].get<double>();
     double a_deg = config["rear_propeller_angle"]["value"].get<double>();
     a_ = a_deg * M_PI / 180.0;
@@ -232,13 +208,11 @@ void VehicleModel::load_config(const std::string& path) {
     C_M_ = config["added_mass"]["C_M"].get<double>();
     C_N_ = config["added_mass"]["C_N"].get<double>();
 
-    // Dynamics parameters
     auto dynamics = config["dynamics"];
     fluid_density_ = dynamics["fluid_density"]["value"].get<double>();
     displaced_volume_ = dynamics["displaced_volume"]["value"].get<double>();
     g_ = dynamics["g"]["value"].get<double>();
 
-    // Damping coefficients
     auto damping = dynamics["damping"];
     D_u_ = damping["linear"]["D_u"].get<double>();
     D_v_ = damping["linear"]["D_v"].get<double>();
@@ -254,26 +228,23 @@ void VehicleModel::load_config(const std::string& path) {
     Dn_q_ = damping["angular_n"]["Dn_q"].get<double>();
     Dn_r_ = damping["angular_n"]["Dn_r"].get<double>();
 
-    // Propeller parameters
     auto propeller = dynamics["propeller"];
     p_rear_max_ = propeller["force_range_r"]["max"].get<double>();
     p_front_mid_max_ = propeller["force_range_f_m"]["max"].get<double>();
 
-    // Weight and buoyancy
     W_ = mass_ * g_;
     B_ = fluid_density_ * displaced_volume_ * g_;
     W_minus_B_ = W_ - B_;
 }
 
 void VehicleModel::calculate_linear() {
-    // Use MX for symbolic matrices. (Note: constants are automatically converted.)
     Sparsity diag_sp = Sparsity::diag(3);
     MX A11 = MX::zeros(diag_sp);
     A11(0,0) = C_X_;
     A11(1,1) = C_Y_;
     A11(2,2) = C_Z_;
 
-    Sparsity sp_A12(3, 3, {0,0,1,2}, {2,1}, true);  // True for column-compressed
+    Sparsity sp_A12(3, 3, {0,0,1,2}, {2,1}, true);
     MX A12 = MX::zeros(sp_A12);
     A12(1,2) = C_Z_q_;
     A12(2,1) = C_Y_r_;
@@ -301,7 +272,6 @@ void VehicleModel::calculate_linear() {
     
     M_ = Mrb + Ma_;
 
-    // Use solve to get the inverse symbolically
     M_inv_ = simplify(MX::inv(M_));
     
     MX Dl_lin = MX::diag(MX::vertcat({MX(D_u_), MX(D_v_), MX(D_w_)}));
