@@ -1,7 +1,7 @@
 # ControlSystem
 
 
-**Check the latest verison with ROS2 Humble and Gazebo implementation, uses FossenNet DL model:** [auv_ws](https://github.com/elymsyr/auv_ws)
+## Check the latest verison with ROS2 Humble and Gazebo implementation, uses FossenNet DL model:** [auv_ws](https://github.com/elymsyr/auv_ws)
 
 
 A modular, GPU-accelerated control system for Autonomous Underwater Vehicles (AUVs). The system is fully customizable and designed to operate in mission- and environment-agnostic scenarios.
